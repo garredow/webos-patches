@@ -1,0 +1,208 @@
+Name: UI Scale (Alpha 2)
+Version: 1
+Author: Choorp Studios
+Description: UI scale test
+
+--- .orig/etc/palm/luna-platform.conf
++++ /etc/palm/luna-platform.conf
+@@ -2,7 +2,7 @@
+ TabletUi=true
+ PositiveSpaceTopPadding=42
+ PositiveSpaceBottomPadding=42
+-ScaleFactor=1.5
++ScaleFactor=1.19
+ AtlasEnabled=false
+ 
+ [Display]
+--- .orig/usr/palm/frameworks/mojo/submissions/383/stylesheets/global-notifications.css
++++ /usr/palm/frameworks/mojo/submissions/383/stylesheets/global-notifications.css
+@@ -32,7 +32,7 @@
+ .dashboard-notification-module {
+   min-width: 320px;
+   max-width: 480px;
+-  height: 48px;
++  height: 39px;
+   margin-top: 4px;
+   display: block;
+ }
+@@ -40,8 +40,8 @@
+ /* individual targets */
+ 
+ .palm-dashboard-icon-container {
+-  width: 54px;
+-  height: 48px;
++  width: 43px;
++  height: 39px;
+   float: left;
+   clear: right;
+  margin-right: 4px;
+@@ -51,7 +51,7 @@
+ }
+ 
+ .palm-dashboard-text-container {
+-  height: 48px;
++  height: 39px;
+   width: auto;
+   max-width: 480px;
+   overflow: hidden;
+@@ -59,7 +59,8 @@
+   -webkit-box-sizing: border-box;
+   vertical-align: middle;
+   border-width: 0px 12px 0px 12px;
+-  font-size: 16px;
++  font-size: 14px;
++  margin-top: -4px;
+ }
+ 
+ .palm-dashboard-icon-container:active,
+@@ -72,8 +73,8 @@
+ /* items within the containers */
+ 
+ .palm-dashboard-icon	{
+-  width: 48px;
+-  height: 48px;
++  width: 39px;
++  height: 39px;
+   margin-left: -9px;
+   background: url(../images/notification-large-info.png) center center no-repeat;
+ }
+@@ -76,6 +77,7 @@
+   height: 48px;
+   margin-left: -9px;
+   background: url(../images/notification-large-info.png) center center no-repeat;
++  -webkit-background-size: contain;
+ }
+ 
+ .palm-dashboard-icon.alert {
+@@ -115,7 +117,7 @@
+   white-space: nowrap;
+   overflow: hidden;
+   text-overflow: ellipsis;
+-  padding-bottom:1px;
++  padding-bottom:0px;
+ }
+ .dashboard-title {
+   padding-top: 3px;
+@@ -118,7 +120,7 @@
+   padding-bottom:1px;
+ }
+ .dashboard-title {
+-  padding-top: 3px;
++  padding-top: 0px;
+   font-weight: bold;
+ }
+ .palm-dashboard-text {
+@@ -122,7 +124,7 @@
+   font-weight: bold;
+ }
+ .palm-dashboard-text {
+-  margin-top:-1px;
++  margin-top:0px;
+ }
+ 
+ /* single version of the notification */
+@@ -132,7 +134,7 @@
+ }
+ .single .palm-dashboard-icon-container {
+   margin-right: 0px;
+-  width: 57px;
++  width: 46px;
+   -webkit-border-image: url(../images/dashboard-container-sprite.png) 0 1 144 12 repeat stretch;
+ }
+ .single .palm-dashboard-text-container {
+--- .orig/usr/palm/frameworks/mojo2/submissions/112/stylesheets/global-notifications.css
++++ /usr/palm/frameworks/mojo2/submissions/112/stylesheets/global-notifications.css
+@@ -45,7 +45,7 @@
+ .dashboard-notification-module {
+   min-width: 320px;
+   max-width: 480px;
+-  height: 48px;
++  height: 39px;
+   margin-top: 4px;
+   display: block;
+ }
+@@ -53,8 +53,8 @@
+ /* individual targets */
+ 
+ .palm-dashboard-icon-container {
+-  width: 54px;
+-  height: 48px;
++  width: 43px;
++  height: 39px;
+   float: left;
+   clear: right;
+  margin-right: 4px;
+@@ -64,7 +64,7 @@
+ }
+ 
+ .palm-dashboard-text-container {
+-  height: 48px;
++  height: 39px;
+   width: auto;
+   max-width: 480px;
+   overflow: hidden;
+@@ -72,7 +72,8 @@
+   -webkit-box-sizing: border-box;
+   vertical-align: middle;
+   border-width: 0px 12px 0px 12px;
+-  font-size: 16px;
++  font-size: 14px;
++  margin-top: -4px;
+ }
+ 
+ .palm-dashboard-icon-container:active,
+@@ -85,8 +86,8 @@
+ /* items within the containers */
+ 
+ .palm-dashboard-icon	{
+-  width: 48px;
+-  height: 48px;
++  width: 39px;
++  height: 39px;
+   margin-left: -9px;
+   background: url(../images/notification-large-info.png) center center no-repeat;
+ }
+@@ -89,6 +90,7 @@
+   height: 48px;
+   margin-left: -9px;
+   background: url(../images/notification-large-info.png) center center no-repeat;
++  -webkit-background-size: contain;
+ }
+ 
+ .palm-dashboard-icon.alert {
+@@ -128,7 +130,7 @@
+   white-space: nowrap;
+   overflow: hidden;
+   text-overflow: ellipsis;
+-  padding-bottom:1px;
++  padding-bottom:0px;
+ }
+ .dashboard-title {
+   padding-top: 3px;
+@@ -131,7 +133,7 @@
+   padding-bottom:1px;
+ }
+ .dashboard-title {
+-  padding-top: 3px;
++  padding-top: 0px;
+   font-weight: bold;
+ }
+ .palm-dashboard-text {
+@@ -135,7 +137,7 @@
+   font-weight: bold;
+ }
+ .palm-dashboard-text {
+-  margin-top:-1px;
++  margin-top:0px;
+ }
+ 
+ /* single version of the notification */
+@@ -145,7 +147,7 @@
+ }
+ .single .palm-dashboard-icon-container {
+   margin-right: 0px;
+-  width: 57px;
++  width: 46px;
+   -webkit-border-image: url(../images/dashboard-container-sprite.png) 0 1 144 12;
+ }
+ .single .palm-dashboard-text-container {

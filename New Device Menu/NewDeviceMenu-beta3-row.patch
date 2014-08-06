@@ -1,0 +1,3709 @@
+Name: New Device Menu -Beta 3
+Version: 4
+Author: Choorp Studios
+Description: This patch completely remodels the Device Menu to make it more efficient and useful.
+
+--- .orig/usr/lib/luna/system/luna-systemui/app/controllers/devicemenu-assistant.js
++++ /usr/lib/luna/system/luna-systemui/app/controllers/devicemenu-assistant.js
+@@ -32,6 +32,10 @@
+ 		this.controller.get('dm_date').innerHTML = Mojo.Format.formatDate(date,{date:'EEE '}) +  Mojo.Format.formatDate(date,{date:'long'});
+ 		var msg = $L("Battery: #{batlevel}");
+ 		this.controller.get('dm_battery').innerHTML = new Template(msg).evaluate({"batlevel": Mojo.Format.formatPercent(this.barAssistant.getBatteryLevel())});
++		this.controller.setupWidget('brightSlider', {minValue: 1, maxValue: 100}, this.brightModel = { value: 50});
++		this.controller.setupWidget('rvolSlider', {minValue: 0, maxValue: 100}, this.rvolModel = { value: 50});
++		this.controller.setupWidget('mvolSlider', {minValue: 0, maxValue: 100}, this.mvolModel = { value: 50});
++		this.controller.setupWidget('svolSlider', {minValue: 0, maxValue: 100}, this.svolModel = { value: 50});
+ 						
+ 		this.modesModel = {scrollbars: false, mode: "vertical"},
+ 		this.controller.setupWidget('devicescroller', {}, this.modesModel);
+@@ -42,6 +46,11 @@
+ 		this.controller.setupWidget('wifidetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
+ 		this.controller.setupWidget('btdetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
+ 		this.controller.setupWidget('vpndetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
++		this.controller.setupWidget('brightdetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
++		this.controller.setupWidget('phonedetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
++		this.controller.setupWidget('networkdetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
++		this.controller.setupWidget('gpsdetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
++		this.controller.setupWidget('voldetails', {modelProperty:'myOpenProperty'}, this.drawerModel);
+ 		this.imedrawer = this.controller.get('imedetails');
+ 		this.wifidrawer = this.controller.get('wifidetails');
+ 		this.btdrawer = this.controller.get('btdetails');
+@@ -91,7 +100,8 @@
+ 		//Spinner for BT
+ 		this.controller.setupWidget('btSpinner', this.spinnerAttrs, this.btspinnerModel);
+ 			
+-		if(this.barAssistant.getAirplaneMode()) 			
++		if(this.barAssistant.getAirplaneMode()) {
++			this.controller.get('flightStatus').innerHTML = $L('On');
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn off Airplane Mode');
+ 		else
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn on Airplane Mode');
+@@ -93,7 +103,9 @@
+ 			
+ 		if(this.barAssistant.getAirplaneMode()) 			
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn off Airplane Mode');
+-		else
++		}
++		else {
++			this.controller.get('flightStatus').innerHTML = $L('Off');
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn on Airplane Mode');
+ 		
+ 		var btstate = this.barAssistant.getCurrentBluetoothState();
+@@ -95,6 +107,7 @@
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn off Airplane Mode');
+ 		else
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn on Airplane Mode');
++		}
+ 		
+ 		var btstate = this.barAssistant.getCurrentBluetoothState();
+ 		if(btstate === 'Off') {
+@@ -150,7 +163,14 @@
+ 	},
+ 	
+ 	activate: function() {
+-		this.controller.get('dm_airplanemode').addEventListener(Mojo.Event.tap, this.toggleAirplaneMode.bind(this));
++		// Gesture bars
++		this.controller.get('gesture_bar_l').addEventListener('mousedown', this.gestureL.bind(this));
++		this.controller.get('gesture_bar_r').addEventListener('mousedown', this.gestureR.bind(this));
++
++		// Wifi tab
++		this.controller.get('toggle-wifi').addEventListener(Mojo.Event.tap,this.handleToggleWifi.bindAsEventListener(this));
++		this.controller.get('dm_wifi').addEventListener(Mojo.Event.tap, this.handleToggleWifiRadio.bind(this));
++		this.controller.get('dm_wifi').addEventListener(Mojo.Event.hold, this.cycleWifiRadio.bind(this));
+ 		this.controller.get('wifilist').addEventListener(Mojo.Event.listTap,this.handleWiFiTap.bind(this));
+ 		this.controller.get('btlist').addEventListener(Mojo.Event.listTap,this.handleBTTap.bind(this));
+ 		this.controller.get('vpnlist').addEventListener(Mojo.Event.listTap,this.handleVPNTap.bind(this));		
+@@ -152,6 +172,11 @@
+ 	activate: function() {
+ 		this.controller.get('dm_airplanemode').addEventListener(Mojo.Event.tap, this.toggleAirplaneMode.bind(this));
+ 		this.controller.get('wifilist').addEventListener(Mojo.Event.listTap,this.handleWiFiTap.bind(this));
++		this.controller.get('wifi_pref').addEventListener(Mojo.Event.tap,this.handleWiFiLaunch.bind(this));
++
++		// Bluetooth tab
++		this.controller.get('toggle-bt').addEventListener(Mojo.Event.tap,this.handleToggleBt.bindAsEventListener(this));
++		this.controller.get('dm_bluetooth').addEventListener(Mojo.Event.tap, this.toggleBTRadio.bind(this));
+ 		this.controller.get('btlist').addEventListener(Mojo.Event.listTap,this.handleBTTap.bind(this));
+ 		this.controller.get('vpnlist').addEventListener(Mojo.Event.listTap,this.handleVPNTap.bind(this));		
+ 		this.controller.get('dm_wifi').addEventListener(Mojo.Event.tap, this.togglewifiList.bind(this));
+@@ -153,12 +178,6 @@
+ 		this.controller.get('dm_airplanemode').addEventListener(Mojo.Event.tap, this.toggleAirplaneMode.bind(this));
+ 		this.controller.get('wifilist').addEventListener(Mojo.Event.listTap,this.handleWiFiTap.bind(this));
+ 		this.controller.get('btlist').addEventListener(Mojo.Event.listTap,this.handleBTTap.bind(this));
+-		this.controller.get('vpnlist').addEventListener(Mojo.Event.listTap,this.handleVPNTap.bind(this));		
+-		this.controller.get('dm_wifi').addEventListener(Mojo.Event.tap, this.togglewifiList.bind(this));
+-		this.controller.get('dm_vpn').addEventListener(Mojo.Event.tap, this.toggleVPNList.bind(this));
+-		this.controller.get('dm_bluetooth').addEventListener(Mojo.Event.tap, this.togglebluetoothList.bind(this));
+-		this.controller.get('wifi_radio').addEventListener(Mojo.Event.tap, this.toggleWifiRadio.bind(this));
+-		this.controller.get('bt_radio').addEventListener(Mojo.Event.tap, this.toggleBTRadio.bind(this));
+ 		this.controller.get('bt_pref').addEventListener(Mojo.Event.tap,this.handleBluetoothLaunch.bind(this));
+ 		this.controller.get('wifi_pref').addEventListener(Mojo.Event.tap,this.handleWiFiLaunch.bind(this));
+ 		this.controller.get('vpn_pref').addEventListener(Mojo.Event.tap,this.handleVPNLaunch.bind(this));
+@@ -160,7 +179,40 @@
+ 		this.controller.get('wifi_radio').addEventListener(Mojo.Event.tap, this.toggleWifiRadio.bind(this));
+ 		this.controller.get('bt_radio').addEventListener(Mojo.Event.tap, this.toggleBTRadio.bind(this));
+ 		this.controller.get('bt_pref').addEventListener(Mojo.Event.tap,this.handleBluetoothLaunch.bind(this));
+-		this.controller.get('wifi_pref').addEventListener(Mojo.Event.tap,this.handleWiFiLaunch.bind(this));
++
++		// Location tab
++		this.controller.get('toggle-gps').addEventListener(Mojo.Event.tap,this.handleToggleGps.bindAsEventListener(this));
++		this.controller.get('dm_gps').addEventListener(Mojo.Event.tap, this.toggleGPS.bindAsEventListener(this));
++		this.controller.get('dm_google').addEventListener(Mojo.Event.tap, this.toggleGoogle.bindAsEventListener(this));
++		this.controller.get('gps_pref').addEventListener(Mojo.Event.tap,this.handleLocationLaunch.bind(this));
++
++		// Volume tab
++		this.controller.get('toggle-vol').addEventListener(Mojo.Event.tap, this.handleToggleVol.bindAsEventListener(this));
++		this.controller.get('rvolSlider').addEventListener(Mojo.Event.propertyChange, this.handleRvolSlider.bindAsEventListener(this));
++		this.controller.get('mvolSlider').addEventListener(Mojo.Event.propertyChange, this.handleMvolSlider.bindAsEventListener(this));
++		this.controller.get('svolSlider').addEventListener(Mojo.Event.propertyChange, this.handleSvolSlider.bindAsEventListener(this));
++
++		// Screen tab
++		this.controller.get('toggle-bright').addEventListener(Mojo.Event.tap, this.handleToggleBright.bindAsEventListener(this));
++		this.controller.get('brightSlider').addEventListener(Mojo.Event.propertyChange, this.handleBrightSlider.bindAsEventListener(this));
++		this.controller.get('dm_rotLock').addEventListener(Mojo.Event.tap, this.toggleRotationLock.bindAsEventListener(this));
++		this.controller.get('dm_flash').addEventListener(Mojo.Event.tap, this.toggleFlash.bindAsEventListener(this));
++
++		// Phone tab
++		this.controller.get('toggle-phone').addEventListener(Mojo.Event.tap,this.handleTogglePhone.bindAsEventListener(this));
++		this.controller.get('phone_radio').addEventListener(Mojo.Event.tap, this.togglePhone.bindAsEventListener(this));
++		this.controller.get('phone_data').addEventListener(Mojo.Event.tap, this.toggleData.bindAsEventListener(this));
++		this.controller.get('phone_network').addEventListener(Mojo.Event.tap, this.toggleNetworkDrawer.bindAsEventListener(this));
++			this.controller.get('network_auto').addEventListener(Mojo.Event.tap, this.changeNetworkState.bindAsEventListener(this));
++			this.controller.get('network_2g').addEventListener(Mojo.Event.tap, this.changeNetworkState.bindAsEventListener(this));
++			this.controller.get('network_3g').addEventListener(Mojo.Event.tap, this.changeNetworkState.bindAsEventListener(this));
++		this.controller.get('phone_roam').addEventListener(Mojo.Event.tap, this.toggleRoam.bindAsEventListener(this));
++		this.controller.get('phone_flight').addEventListener(Mojo.Event.tap, this.toggleAirplaneMode.bind(this));
++
++		// VPN tab
++		this.controller.get('toggle-vpn').addEventListener(Mojo.Event.tap,this.handleToggleVpn.bindAsEventListener(this));
++		this.controller.get('dm_vpn').addEventListener(Mojo.Event.tap, this.toggleVPNList.bind(this));
++		this.controller.get('vpnlist').addEventListener(Mojo.Event.listTap,this.handleVPNTap.bind(this));
+ 		this.controller.get('vpn_pref').addEventListener(Mojo.Event.tap,this.handleVPNLaunch.bind(this));
+ 		this.controller.get('ime_OnOff').addEventListener(Mojo.Event.tap, this.toggleIMEOnOff.bind(this));
+ 		this.controller.get('imelist').addEventListener(Mojo.Event.listTap,this.handleIMETap.bindAsEventListener(this));
+@@ -162,6 +214,8 @@
+ 		this.controller.get('bt_pref').addEventListener(Mojo.Event.tap,this.handleBluetoothLaunch.bind(this));
+ 		this.controller.get('wifi_pref').addEventListener(Mojo.Event.tap,this.handleWiFiLaunch.bind(this));
+ 		this.controller.get('vpn_pref').addEventListener(Mojo.Event.tap,this.handleVPNLaunch.bind(this));
++
++		// IME tab
+ 		this.controller.get('ime_OnOff').addEventListener(Mojo.Event.tap, this.toggleIMEOnOff.bind(this));
+ 		this.controller.get('imelist').addEventListener(Mojo.Event.listTap,this.handleIMETap.bindAsEventListener(this));
+ 		this.controller.get('dm_ime').addEventListener(Mojo.Event.tap, this.toggleIMEList.bindAsEventListener(this));
+@@ -163,7 +217,6 @@
+ 		this.controller.get('wifi_pref').addEventListener(Mojo.Event.tap,this.handleWiFiLaunch.bind(this));
+ 		this.controller.get('vpn_pref').addEventListener(Mojo.Event.tap,this.handleVPNLaunch.bind(this));
+ 		this.controller.get('ime_OnOff').addEventListener(Mojo.Event.tap, this.toggleIMEOnOff.bind(this));
+-		this.controller.get('imelist').addEventListener(Mojo.Event.listTap,this.handleIMETap.bindAsEventListener(this));
+ 		this.controller.get('dm_ime').addEventListener(Mojo.Event.tap, this.toggleIMEList.bindAsEventListener(this));
+ 		this.controller.get('ime_pref').addEventListener(Mojo.Event.tap,this.handleIMELaunch.bindAsEventListener(this));
+ 
+@@ -165,6 +218,7 @@
+ 		this.controller.get('ime_OnOff').addEventListener(Mojo.Event.tap, this.toggleIMEOnOff.bind(this));
+ 		this.controller.get('imelist').addEventListener(Mojo.Event.listTap,this.handleIMETap.bindAsEventListener(this));
+ 		this.controller.get('dm_ime').addEventListener(Mojo.Event.tap, this.toggleIMEList.bindAsEventListener(this));
++		this.controller.get('imelist').addEventListener(Mojo.Event.listTap,this.handleIMETap.bindAsEventListener(this));
+ 		this.controller.get('ime_pref').addEventListener(Mojo.Event.tap,this.handleIMELaunch.bindAsEventListener(this));
+ 
+ 		//Close the App because this is a first launch.
+@@ -167,6 +221,8 @@
+ 		this.controller.get('dm_ime').addEventListener(Mojo.Event.tap, this.toggleIMEList.bindAsEventListener(this));
+ 		this.controller.get('ime_pref').addEventListener(Mojo.Event.tap,this.handleIMELaunch.bindAsEventListener(this));
+ 
++		this.wifiHeld = false;
++
+ 		//Close the App because this is a first launch.
+ 		this._stageRef = 1;
+ 		this.toggleDeviceMenu();						
+@@ -180,6 +236,54 @@
+ 	btdeviceList: [],
+ 	imeList: [{"DISPNAME":$L("PinYin"), "value":"pinyin", "showConnected":"none", "showSelected":"notselected"},{"DISPNAME":$L("Handwriting"), "value":"hwr", "showConnected":"none", "showSelected":"notselected"}],
+ 
++	gestureL: function(event) {
++		switch (this.currentTab)
++		{
++			case "wifi":
++				this.handleToggleBt();
++				break;
++			case "bluetooth":
++				this.handleToggleGps();
++				break;
++			case "gps":
++				this.handleToggleVol();
++				break;
++			case "vol":
++				this.handleToggleBright();
++				break;
++			case "bright":
++				this.handleTogglePhone();
++				break;
++			case "phone":
++				this.handleToggleWifi();
++				break;
++		}
++	},
++	gestureR: function(event) {
++		switch (this.currentTab)
++		{
++			case "wifi":
++				this.handleTogglePhone();
++				break;
++			case "bluetooth":
++				this.handleToggleWifi();
++				break;
++			case "gps":
++				this.handleToggleBt();
++				break;
++			case "vol":
++				this.handleToggleGps();
++				break;
++			case "bright":
++				this.handleToggleVol();
++				break;
++			case "phone":
++				this.handleToggleBright();
++				break;
++		}
++	},
++
++	// ==================== Wifi tab ====================
+ 
+ 	/*
+ 	 * Toggles the AirplaneMode.
+@@ -181,14 +285,35 @@
+ 	imeList: [{"DISPNAME":$L("PinYin"), "value":"pinyin", "showConnected":"none", "showSelected":"notselected"},{"DISPNAME":$L("Handwriting"), "value":"hwr", "showConnected":"none", "showSelected":"notselected"}],
+ 
+ 
+-	/*
+-	 * Toggles the AirplaneMode.
+-	 * 
+-	 * When Airplane Mode is enabled, it turns off the Phone. Also, it saves the current state of Bluetooth and WiFi and turn them off. 
+-	 * The Airplan Mode setting gets stored in the System Preferences.
+-	 */	 
+-	
+-	toggleAirplaneMode: function() {
++	handleToggleWifi: function(event) {
++		if (this.wifidrawer.mojo.getOpenState()) {
++			this.controller.get('toggle-wifi').removeClassName('on');
++			this.controller.get('toggle-wifi').addClassName('off');
++			this.togglewifiList(event);
++			this.controller.get('wifidetails').hide();
++		}
++		else {
++			this.controller.get('toggle-wifi').removeClassName('off');
++			this.controller.get('toggle-wifi').addClassName('on');
++			this.controller.get('wifidetails').show();
++			this.closeOtherDrawers('wifi');
++			this.togglewifiList(event);
++			this.currentTab = 'wifi';
++		}
++	},
++	handleToggleWifiRadio: function(event) {
++		if (this.wifiHeld) {
++			this.wifiHeld = false;
++			return;
++		}
++
++		this.toggleWifiRadio(event);
++	},
++
++	cycleWifiRadio: function(event) {
++		this.wifiHeld = true;
++		if(RadioState.get('wifi')) {
++			this.spinOff();
+ 		
+ 		//Ignore the tap event if Airplane Mode is in Progress
+ 		if(this.apModeInProgress)
+@@ -190,8 +315,71 @@
+ 	
+ 	toggleAirplaneMode: function() {
+ 		
+-		//Ignore the tap event if Airplane Mode is in Progress
+-		if(this.apModeInProgress)
++			if(this.wifiFindNetworksReq) {
++				this.wifiFindNetworksReq.cancel();
++				this.wifiFindNetworksReq = undefined;
++			}
++			WiFiService.setState("disabled",null,null);
++			WiFiService.setState("enabled",null,null);
++		}
++	},
++
++	// ==================== Bluetooth tab ====================
++
++	handleToggleBt: function(event) {
++		if (this.btdrawer.mojo.getOpenState()) {
++			this.controller.get('toggle-bt').removeClassName('on');
++			this.controller.get('toggle-bt').addClassName('off');
++			this.togglebluetoothList(event);
++			this.controller.get('btdetails').hide();
++		}
++		else {
++			this.controller.get('toggle-bt').removeClassName('off');
++			this.controller.get('toggle-bt').addClassName('on');
++			this.controller.get('btdetails').show();
++			this.closeOtherDrawers('bluetooth');
++			this.togglebluetoothList(event);
++			this.currentTab = 'bluetooth';
++		}
++	},
++
++	// ==================== Location tab ====================
++
++	handleToggleGps: function(event) {
++		if (this.controller.get('toggle-gps').hasClassName('on')) {
++			this.controller.get('toggle-gps').removeClassName('on');
++			this.controller.get('toggle-gps').addClassName('off');
++			this.controller.get('gpsdetails').mojo.setOpenState(false);
++			this.controller.get('gpsdetails').hide();
++		}
++		else {
++			this.controller.get('toggle-gps').removeClassName('off');
++			this.controller.get('toggle-gps').addClassName('on');
++			this.controller.get('gpsdetails').show();
++			this.closeOtherDrawers('gps');
++			this.controller.get('gpsdetails').mojo.setOpenState(true);
++			this.currentTab = 'gps';
++		}
++	},
++	toggleGPS: function(event) {
++		this.gpsEnabled = !this.gpsEnabled;
++		this.controller.serviceRequest('palm://com.palm.location', {
++			method: 'setUseGps',
++			parameters: {
++				useGps: this.gpsEnabled
++			}
++		});
++		this.setGPSLabel();
++	},
++	setGPSLabel: function() {
++		if(this.gpsEnabled) {
++			this.controller.get('gpsStatus').innerText = "On";
++		} else {
++			this.controller.get('gpsStatus').innerText = "Off";
++		}
++	},
++	toggleGoogle: function(event) {
++		if (!this.googleTermsAccepted)
+ 			return;
+ 		
+ 		//this.apSpinnerModel.spinning = true;
+@@ -193,6 +381,28 @@
+ 		//Ignore the tap event if Airplane Mode is in Progress
+ 		if(this.apModeInProgress)
+ 			return;
++
++		this.googleEnabled = !this.googleEnabled;
++		this.controller.serviceRequest('palm://com.palm.location', {
++			method: 'setUseGoogle',
++			parameters: {
++				useGoogle: this.googleEnabled
++			}
++		});
++		this.setGoogleLabel();
++	},
++	setGoogleLabel: function() {
++		if(this.googleEnabled) {
++			this.controller.get('googleStatus').innerText = "On";
++		} else {
++			this.controller.get('googleStatus').innerText = "Off";
++		}
++	},
++	handleLocationLaunch: function(event) {
++		this.launchLocation.bind(this).delay(0.2);
++	},
++	launchLocation: function(appParams) {
++		this.closeDeviceMenuWithoutAnimation();
+ 		
+ 		//this.apSpinnerModel.spinning = true;
+ 		//this.controller.modelChanged(this.apSpinnerModel);	
+@@ -194,9 +404,267 @@
+ 		if(this.apModeInProgress)
+ 			return;
+ 		
+-		//this.apSpinnerModel.spinning = true;
+-		//this.controller.modelChanged(this.apSpinnerModel);	
+-				
++		var callParams = {id: 'com.palm.app.location'};
++		this.controller.serviceRequest('palm://com.palm.applicationManager', {
++				method: 'open',
++				parameters: callParams
++		});
++	},
++
++	// ==================== Volume tab ====================
++
++	handleToggleVol: function(event) {
++		if (this.controller.get('toggle-vol').hasClassName('on')) {
++			this.controller.get('toggle-vol').removeClassName('on');
++			this.controller.get('toggle-vol').addClassName('off');
++			this.controller.get('voldetails').mojo.setOpenState(false);
++			this.controller.get('voldetails').hide();
++		}
++		else {
++			this.controller.get('toggle-vol').removeClassName('off');
++			this.controller.get('toggle-vol').addClassName('on');
++			this.controller.get('voldetails').show();
++			this.closeOtherDrawers('vol');
++			this.controller.get('voldetails').mojo.setOpenState(true);
++			this.currentTab = 'vol';
++		}
++	},
++	handleRvolSlider: function(event) {
++		this.controller.serviceRequest('palm://com.palm.audio/ringtone', {
++			method: 'setVolume',
++			parameters:{volume:Math.round(event.value)}
++		});
++		this.controller.get('dm_rvol').innerText = "Ringtone: " + Math.round(event.value) + "%";
++	},
++	handleMvolSlider: function(event) {
++		this.controller.serviceRequest('palm://com.palm.audio/media', {
++			method: 'setVolume',
++			parameters:{volume:Math.round(event.value)}
++		});
++		this.controller.get('dm_mvol').innerText = "Media: " + Math.round(event.value) + "%";
++	},
++	handleSvolSlider: function(event) {
++		this.controller.serviceRequest('palm://com.palm.audio/system', {
++			method: 'setVolume',
++			parameters:{volume:Math.round(event.value)}
++		});
++		this.controller.get('dm_svol').innerText = "System: " + Math.round(event.value) + "%";
++	},
++
++	// ==================== Screen tab ====================
++
++	handleToggleBright: function(event) {
++		if (this.controller.get('toggle-bright').hasClassName('on')) {
++			this.controller.get('toggle-bright').removeClassName('on');
++			this.controller.get('toggle-bright').addClassName('off');
++			this.controller.get('brightdetails').mojo.setOpenState(false);
++			this.controller.get('brightdetails').hide();
++		}
++		else {
++			this.controller.get('toggle-bright').removeClassName('off');
++			this.controller.get('toggle-bright').addClassName('on');
++			this.controller.get('brightdetails').show();
++			this.closeOtherDrawers('bright');
++			this.controller.get('brightdetails').mojo.setOpenState(true);
++			this.currentTab = 'bright';
++		}
++	},
++	handleBrightSlider: function(event) {
++		this.controller.serviceRequest('palm://com.palm.display/control', {
++			method: 'setProperty',
++			parameters:{maximumBrightness:Math.round(event.value)}
++		});
++		this.controller.get('dm_brightness').innerText = "Brightness: " + Math.round(event.value) + "%";
++	},
++	toggleRotationLock: function() {
++		if (this.rotLock != "On" && this.rotLock != "Off")
++			return;
++
++		var toDo;
++		if (this.rotLock == "On")
++			toDo = "on";
++		else
++			toDo = "off";
++
++		this.controller.serviceRequest('palm://com.xwteam.app.xwtweak/', {
++			method: 'accelSetState',
++			parameters:{"state": toDo},
++			onSuccess: function() {
++				if (toDo == "on")
++					this.rotLock = "Off";
++				else if (toDo == "off")
++					this.rotLock = "On";
++				else
++					this.rotLock = "Undefined";
++				this.controller.get('rotLockStatus').innerText = this.rotLock;
++			}.bind(this),
++			onFailure: function() {
++				this.rotLock = "Error";
++				this.controller.get('rotLockStatus').innerText = this.rotLock;
++			}.bind(this)
++		});
++	},
++	toggleFlash: function() {
++		if(this.flashVal == 0) {
++			this.flashVal = 100;
++		} else {
++			this.flashVal = 0;
++		}
++		this.controller.serviceRequest('palm://ca.canucksoftware.systoolsmgr', {
++			method: 'flashOn',
++			parameters: {
++				value: this.flashVal
++			},
++			onSuccess: function() {
++				this.setFlashLabel();
++			}.bind(this)
++		});
++	},
++	setFlashLabel: function() {
++		if(this.flashVal == 0) {
++			this.controller.get('flashStatus').innerText = "Off";
++		} else {
++			this.controller.get('flashStatus').innerText = "On";
++		}
++	},
++
++	// ==================== Phone tab ====================
++
++	handleTogglePhone: function(event) {
++		if (this.controller.get('toggle-phone').hasClassName('on')) {
++			this.controller.get('toggle-phone').removeClassName('on');
++			this.controller.get('toggle-phone').addClassName('off');
++			this.controller.get('phonedetails').mojo.setOpenState(false);
++			this.controller.get('phonedetails').hide();
++		}
++		else {
++			this.controller.get('toggle-phone').removeClassName('off');
++			this.controller.get('toggle-phone').addClassName('on');
++			this.controller.get('phonedetails').show();
++			this.closeOtherDrawers('phone');
++			this.controller.get('phonedetails').mojo.setOpenState(true);
++			this.currentTab = 'phone';
++		}
++	},
++	togglePhone: function(event) {
++		if(this.phoneState == "on") {
++			this.phoneState = "off";
++		} else {
++			this.phoneState = "on";
++		}
++		this.controller.serviceRequest('palm://com.palm.telephony', {
++			method: 'powerSet',
++			parameters: {
++				state: this.phoneState
++			}
++		});
++		this.setPhoneLabel();
++	},
++	setPhoneLabel: function() {
++		this.controller.get('phoneStatus').innerText = this.phoneState;
++	},
++	toggleData: function(event) {
++		if(this.phoneState == "on") {
++			if(this.dataDisabled == "on") {
++				this.dataDisabled = "off";
++			} else {
++				this.dataDisabled = "on";
++			}
++			this.controller.serviceRequest('palm://com.palm.wan', {
++				method: 'set',
++				parameters: {
++					disablewan: this.dataDisabled
++				}
++			});
++			this.setDataLabel();
++		} else {
++			Mojo.Controller.errorDialog("Error: Phone radio needs to be on and " + "connected for this function");
++		}
++	},
++	setDataLabel: function() {
++		if(this.dataDisabled == "off") {
++			this.controller.get('dataStatus').innerText = "on";
++		} else {
++			this.controller.get('dataStatus').innerText = "off";
++		}
++	},
++	toggleNetworkDrawer: function() {
++		if(this.controller.get('networkdetails').mojo.getOpenState()) {
++			this.controller.get('networkdetails').mojo.setOpenState(false);
++		}
++		else {
++			this.controller.get('networkdetails').mojo.setOpenState(true);
++		}
++	},
++	changeNetworkState: function(event) {
++		// this.controller.get('networkStatus').innerHTML = $L('Working...'); // TODO: Remove
++
++		if(event.target.id == "network_2g")
++			var network = "gsm";
++		else if(event.target.id == "network_3g")
++			var network = "umts";
++		else
++			var network = "automatic";
++
++		this.controller.serviceRequest('palm://com.palm.telephony/', {
++			method: "ratSet", parameters: {"mode": network},
++			onComplete: this.updateNetworkState.bind(this) });
++
++		this.controller.get('networkdetails').mojo.setOpenState(false);
++	},
++
++	updateNetworkState: function() {
++		this.controller.get('networkStatus').innerHTML = $L('Auto');
++
++		this.controller.serviceRequest('palm://com.palm.telephony/', {
++			method: "ratQuery", parameters: {}, onSuccess: function(response) {
++				if(response && response.extended && response.extended.mode) {
++					Mojo.Log.error("Network Results: " + JSON.stringify(response));
++					if(response.extended.mode === 'gsm')
++						this.controller.get('networkStatus').innerHTML = $L('2G');
++					else if(response.extended.mode === 'umts')
++						this.controller.get('networkStatus').innerHTML = $L('3G');
++					else
++						this.controller.get('networkStatus').innerHTML = $L('Auto');
++				}
++				else
++					this.controller.get('networkStatus').innerHTML = $L('Auto');
++			}.bind(this), onFailure: function(response) {
++				Mojo.Log.error("Network Results: " + JSON.stringify(response));
++				this.controller.get('networkStatus').innerHTML = $L('Error');
++			}.bind(this)
++		});
++	},
++	toggleRoam: function(event) {
++		if(this.phoneState == "on") {
++			if(this.roamStatus == "roamonly") {
++				this.roamStatus = "any";
++			} else {
++				this.roamStatus = "roamonly";
++			}
++			this.controller.serviceRequest('palm://com.palm.telephony', {
++				method: 'roamModeSet',
++				parameters: {
++					mode: this.roamStatus,
++					client: Mojo.appName
++				}
++			});
++			this.setRoamLabel();
++		} else {
++			Mojo.Controller.errorDialog("Error: Phone radio needs to be on and " + "connected for this function");
++		}
++	},
++	setRoamLabel: function() {
++		if(this.roamStatus == "roamonly") {
++			this.controller.get('roamStatus').innerText = "on";
++		} else {
++			this.controller.get('roamStatus').innerText = "off";
++		}
++	},
++	toggleAirplaneMode: function() {
++		if(this.apModeInProgress)
++			return;
++
+ 		if(this.barAssistant.getAirplaneMode()) {
+ 			Mojo.Log.info("SystemUI - Turning off Airplane Mode - Device Menu");
+ 			this.barAssistant.setAirplaneMode(false);
+@@ -200,8 +668,9 @@
+ 		if(this.barAssistant.getAirplaneMode()) {
+ 			Mojo.Log.info("SystemUI - Turning off Airplane Mode - Device Menu");
+ 			this.barAssistant.setAirplaneMode(false);
+-			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turning off Airplane Mode');			
+-		}			
++			this.controller.get('flightStatus').innerHTML = $L('Off');
++			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turning off Airplane Mode');
++		}
+ 		else {
+ 			Mojo.Log.info("SystemUI - Turning on Airplane Mode - Device Menu");
+ 			this.barAssistant.setAirplaneMode(true);
+@@ -205,6 +674,7 @@
+ 		else {
+ 			Mojo.Log.info("SystemUI - Turning on Airplane Mode - Device Menu");
+ 			this.barAssistant.setAirplaneMode(true);
++			this.controller.get('flightStatus').innerHTML = $L('On');
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turning on Airplane Mode');
+ 		}
+ 		this.apModeInProgress = true;
+@@ -208,7 +678,97 @@
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turning on Airplane Mode');
+ 		}
+ 		this.apModeInProgress = true;
+-		this.toggleDeviceMenu.delay(0.2);		
++		this.toggleDeviceMenu.delay(0.2);
++	},
++
++	// ==================== VPN tab (Coming soon) ====================
++
++	handleToggleVpn: function(event) {
++		if (this.vpndrawer.mojo.getOpenState()) {
++			this.controller.get('toggle-vpn').removeClassName('on');
++			this.controller.get('toggle-vpn').addClassName('off');
++			this.toggleVPNList(event);
++		}
++		else {
++			this.controller.get('toggle-vpn').removeClassName('off');
++			this.controller.get('toggle-vpn').addClassName('on');
++			this.closeOtherDrawers('vpn');
++			this.toggleVPNList(event);
++			this.currentTab = 'vpn';
++		}
++	},
++
++	// End tab-specific functions
++
++	closeOtherDrawers: function(except) {
++		if(except != 'wifi') {
++			this.clearWiFiList();
++			this.controller.get('wifidetails').hide();
++			this.wifidrawer.mojo.setOpenState(false);
++			if (this.controller.get('toggle-wifi').hasClassName('on')) {
++				this.controller.get('toggle-wifi').removeClassName('on');
++				this.controller.get('toggle-wifi').addClassName('off');
++			}
++		}
++		if (except != 'bluetooth') {
++			this.clearBTList();
++			this.controller.get('btdetails').hide();
++			this.btdrawer.mojo.setOpenState(false);
++			if (this.controller.get('toggle-bt').hasClassName('on')) {
++				this.controller.get('toggle-bt').removeClassName('on');
++				this.controller.get('toggle-bt').addClassName('off');
++			}
++		}
++		if(except != 'gps') {
++			this.controller.get('gpsdetails').hide();
++			this.controller.get('gpsdetails').mojo.setOpenState(false);
++			if (this.controller.get('toggle-gps').hasClassName('on')) {
++				this.controller.get('toggle-gps').removeClassName('on');
++				this.controller.get('toggle-gps').addClassName('off');
++			}
++		}
++		if(except != 'vol') {
++			this.controller.get('voldetails').hide();
++			this.controller.get('voldetails').mojo.setOpenState(false);
++			if (this.controller.get('toggle-vol').hasClassName('on')) {
++				this.controller.get('toggle-vol').removeClassName('on');
++				this.controller.get('toggle-vol').addClassName('off');
++			}
++		}
++		if(except != 'bright') {
++			this.controller.get('brightdetails').hide();
++			this.controller.get('brightdetails').mojo.setOpenState(false);
++			if (this.controller.get('toggle-bright').hasClassName('on')) {
++				this.controller.get('toggle-bright').removeClassName('on');
++				this.controller.get('toggle-bright').addClassName('off');
++			}
++		}
++		if(except != 'phone') {
++			this.controller.get('phonedetails').hide();
++			this.controller.get('networkdetails').mojo.setOpenState(false);
++			this.controller.get('phonedetails').mojo.setOpenState(false);
++			if (this.controller.get('toggle-phone').hasClassName('on')) {
++				this.controller.get('toggle-phone').removeClassName('on');
++				this.controller.get('toggle-phone').addClassName('off');
++			}
++		}
++		// if(this.vpndrawer.mojo.getOpenState() && except != 'vpn') {
++		// 	this.controller.hideWidgetContainer(this.controller.get('vpndetails'));
++		// 	this.vpndrawer.mojo.setOpenState(false);
++		// 	if (this.controller.get('toggle-vpn').hasClassName('on')) {
++		// 		this.controller.get('toggle-vpn').removeClassName('on');
++		// 		this.controller.get('toggle-vpn').addClassName('off');
++		// 	}
++		// }
++	},
++
++	unhideDrawersSoSlidersWork: function() {
++		this.controller.get('wifidetails').show();
++		this.controller.get('btdetails').show();
++		this.controller.get('gpsdetails').show();
++		this.controller.get('voldetails').show();
++		this.controller.get('brightdetails').show();
++		this.controller.get('phonedetails').show();
+ 	},
+ 	
+ 	updateAirplaneModeSettings: function() {
+@@ -210,6 +770,14 @@
+ 		this.apModeInProgress = true;
+ 		this.toggleDeviceMenu.delay(0.2);		
+ 	},
++
++	/*
++	 * Toggles the AirplaneMode.
++	 * 
++	 * When Airplane Mode is enabled, it turns off the Phone. Also, it saves the current state of Bluetooth and WiFi and turn them off. 
++	 * The Airplan Mode setting gets stored in the System Preferences.
++	 */	 
++	
+ 	
+ 	updateAirplaneModeSettings: function() {
+ 		
+@@ -211,6 +779,7 @@
+ 		this.toggleDeviceMenu.delay(0.2);		
+ 	},
+ 	
++	
+ 	updateAirplaneModeSettings: function() {
+ 		
+ 		//this.apSpinnerModel.spinning = false;
+@@ -217,6 +786,7 @@
+ 		//this.controller.modelChanged(this.apSpinnerModel);
+ 		
+ 		if(this.barAssistant.getAirplaneMode()) {
++			this.controller.get('flightStatus').innerHTML = $L('On');
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn off Airplane Mode');			
+ 		}			
+ 		else {			
+@@ -220,6 +790,7 @@
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn off Airplane Mode');			
+ 		}			
+ 		else {			
++			this.controller.get('flightStatus').innerHTML = $L('Off');
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turn on Airplane Mode');
+ 		}
+ 		this.apModeInProgress = false;
+@@ -227,6 +798,7 @@
+ 	
+ 	updateAirplaneModeProgress: function() {
+ 		if(this.barAssistant.getAirplaneMode()) {
++			this.controller.get('flightStatus').innerHTML = $L('On');
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turning on Airplane Mode');
+ 		}			
+ 		else {
+@@ -230,6 +802,7 @@
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turning on Airplane Mode');
+ 		}			
+ 		else {
++			this.controller.get('flightStatus').innerHTML = $L('Off');
+ 			this.controller.get('dm_airplanemode_status').innerHTML = $L('Turning off Airplane Mode');
+ 		}
+ 		this.apModeInProgress = true;
+@@ -268,7 +841,7 @@
+ 		this.clearBTList();
+ 		if (this.btdrawer.mojo.getOpenState()) {			
+ 			this.controller.get('btlist').hide();
+-			this.controller.hideWidgetContainer(this.controller.get('btdetails'));	
++			// this.controller.hideWidgetContainer(this.controller.get('btdetails'));	
+ 		}
+ 		else {
+ 						
+@@ -290,7 +863,7 @@
+ 			}	
+ 					
+ 			this.controller.get('btlist').show();
+-			this.controller.showWidgetContainer(this.controller.get('btdetails'));			
++			// this.controller.showWidgetContainer(this.controller.get('btdetails'));			
+ 		}	
+ 		this.btdrawer.mojo.setOpenState(!this.btdrawer.mojo.getOpenState());						
+ 	},
+@@ -758,7 +1331,7 @@
+ 		if(this.wifidrawer.mojo.getOpenState()) {
+ 			this.clearWiFiList();
+ 			this.controller.get('wifilist').hide();
+-			this.controller.hideWidgetContainer(this.controller.get('wifidetails'));
++			// this.controller.hideWidgetContainer(this.controller.get('wifidetails'));
+ 		}
+ 		else {
+ 			if(RadioState.get('wifi')) {
+@@ -775,7 +1348,7 @@
+ 				this.controller.get('wifi_radio').innerHTML = $L('Turn on Wi-Fi');	
+ 					
+ 			this.controller.get('wifilist').show();	
+-			this.controller.showWidgetContainer(this.controller.get('wifidetails'));	
++			// this.controller.showWidgetContainer(this.controller.get('wifidetails'));	
+ 		}		
+ 		this.wifidrawer.mojo.setOpenState(!this.wifidrawer.mojo.getOpenState());						
+ 	},
+@@ -1253,6 +1826,8 @@
+ 	},
+ 	
+ 	closeAllItems: function() {
++		return;
++
+ 		if (this.btdrawer.mojo.getOpenState()) {
+ 			this.clearBTList();			
+ 			this.controller.hideWidgetContainer(this.controller.get('btdetails'));
+@@ -1424,6 +1999,9 @@
+ 		var self = this;
+ 		if(this.isVisible) {
+ 			this.isVisible = false;
++
++			this.closeOtherDrawers(this.currentTab);
++			// this.unhideDrawersSoSlidersWork();
+ 			
+ 			if (this.btspinnerModel.spinning) {
+ 				this.btspinnerModel.spinning = false;
+@@ -1462,7 +2040,8 @@
+ 		}
+ 		else {
+ 			this.isVisible = true;
+-			var date = new Date();		
++			var date = new Date();
++	
+ 			this.controller.get('dm_date').innerHTML = Mojo.Format.formatDate(date,{date:'EEE '})  +  Mojo.Format.formatDate(date,{date:'long'});
+ 			
+ 			if(this.turningOnBtRadio) {
+@@ -1464,6 +2043,151 @@
+ 			this.isVisible = true;
+ 			var date = new Date();		
+ 			this.controller.get('dm_date').innerHTML = Mojo.Format.formatDate(date,{date:'EEE '})  +  Mojo.Format.formatDate(date,{date:'long'});
++
++			this.unhideDrawersSoSlidersWork();
++
++			this.controller.serviceRequest('palm://com.palm.display/control', {
++				method: 'getProperty',
++				parameters:{properties:['maximumBrightness']},
++				onSuccess: function(response) {
++					if(response.maximumBrightness != undefined) {
++						this.brightModel.value = parseInt(response.maximumBrightness);
++						this.controller.modelChanged(this.brightModel);
++						this.controller.get('dm_brightness').innerText = "Brightness: " + response.maximumBrightness + "%";
++					} else {
++						this.controller.get('dm_brightness').innerText = "Brightness: ??%";
++					}
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.display/control', {
++				method: 'getProperty',
++				parameters:{properties:['maximumBrightness']},
++				onSuccess: function(response) {
++					if(response.maximumBrightness != undefined) {
++						this.brightModel.value = parseInt(response.maximumBrightness);
++						this.controller.modelChanged(this.brightModel);
++						this.controller.get('dm_brightness').innerText = "Brightness: " + response.maximumBrightness + "%";
++					} else {
++						this.controller.get('dm_brightness').innerText = "Brightness: ??%";
++					}
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.telephony', {
++				method: 'powerQuery',
++				parameters: {},
++				onSuccess: function(response) {
++					this.phoneState = response.extended.powerState;
++					this.setPhoneLabel();
++				}.bind(this)
++			});			
++			this.controller.serviceRequest('palm://com.palm.connectionmanager', {
++				method: 'getstatus',
++				parameters: {},
++				onSuccess: function(response) {
++					if(response.wan.state === "disconnected") {
++						this.dataDisabled = "on";
++					} else if(response.wan.state === "connected") {
++						this.dataDisabled = "off";
++					}
++					this.setDataLabel();
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.telephony', {
++				method: 'roamModeQuery',
++				parameters: {},
++				onSuccess: function(response) {
++					this.roamStatus = response.extended.mode;
++					this.setRoamLabel();
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.location', {
++				method: 'getUseGps',
++				parameters: {},
++				onSuccess: function(response) {
++					this.gpsEnabled = response.useGps;
++					this.setGPSLabel();
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.location', {
++				method: 'getLocationServicePrefs',
++				parameters: {},
++				onSuccess: function(response) {
++					this.googleEnabled = response.useGoogle;
++					this.googleTermsAccepted = response.isTermsOfUseAccepted;
++					this.setGoogleLabel();
++				}.bind(this)
++			});
++			this.flashVal = 0;
++			this.controller.serviceRequest('palm://ca.canucksoftware.systoolsmgr', {
++				method: 'flashState',
++				parameters: {},
++				onSuccess: function(response) {
++					this.flashVal = response.value;
++					this.setFlashLabel();
++				}.bind(this),
++				onFailure: function(err) {
++					this.controller.get('flashStatus').innerText = "Error";
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.audio/ringtone', {
++				method: 'getVolume',
++				parameters:{},
++				onSuccess: function(response) {
++					if(response.volume != undefined) {
++						this.rvolModel.value = parseInt(response.volume);
++						this.controller.modelChanged(this.rvolModel);
++						this.controller.get('dm_rvol').innerText = "Ringtone: " + response.volume + "%";
++					} else {
++						this.controller.get('dm_rvol').innerText = "Ringtone: ??%";
++					}
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.audio/media', {
++				method: 'getVolume',
++				parameters:{},
++				onSuccess: function(response) {
++					if(response.volume != undefined) {
++						this.mvolModel.value = parseInt(response.volume);
++						this.controller.modelChanged(this.mvolModel);
++						this.controller.get('dm_mvol').innerText = "Media: " + response.volume + "%";
++					} else {
++						this.controller.get('dm_mvol').innerText = "Media: ??%";
++					}
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.palm.audio/system', {
++				method: 'getVolume',
++				parameters:{},
++				onSuccess: function(response) {
++					if(response.volume != undefined) {
++						this.svolModel.value = parseInt(response.volume);
++						this.controller.modelChanged(this.svolModel);
++						this.controller.get('dm_svol').innerText = "System: " + response.volume + "%";
++					} else {
++						this.controller.get('dm_svol').innerText = "System: ??%";
++					}
++				}.bind(this)
++			});
++			this.controller.serviceRequest('palm://com.xwteam.app.xwtweak/', {
++				method: 'accelGetState',
++				parameters:{},
++				onSuccess: function(response) {
++					if(response.state != undefined) {
++						if (response.state == "on")
++							this.rotLock = "Off";
++						else if (response.state == "off")
++							this.rotLock = "On";
++						else
++							this.rotLock = "Error";
++
++						this.controller.get('rotLockStatus').innerText = this.rotLock;
++					} else {
++						this.controller.get('rotLockStatus').innerText = "Error";
++					}
++				}.bind(this)
++			});
++
++			this.updateNetworkState();
+ 			
+ 			if(this.turningOnBtRadio) {
+ 				this.btspinnerModel.spinning = true;
+@@ -1521,6 +2245,8 @@
+ 		var self = this;
+ 		if (this.isVisible) {
+ 			this.isVisible = false;
++
++			this.closeOtherDrawers(this.currentTab);
+ 			
+ 			if (this.btspinnerModel.spinning) {
+ 				this.btspinnerModel.spinning = false;
+--- .orig/usr/lib/luna/system/luna-systemui/stylesheets/devicemenu.css
++++ /usr/lib/luna/system/luna-systemui/stylesheets/devicemenu.css
+@@ -112,6 +112,113 @@
+ 	margin: -3px 0 -2px 4px;
+ }                 
+ 
++/* ----- New Device Menu ----- */
++
++/* Start Experimental */
++
++#palm-device-menu .palm-drawer-contents .palm-row .title {
++  margin-left: 0px;
++}
++
++#palm-device-menu .palm-drawer-contents .palm-row .label {
++  margin-right: 14px;
++}
++
++#palm-device-menu.palm-popup-container {
++  top: -4px;
++  left: 7px;
++  min-width: 306px;
++  max-width: 306px;
++  max-height: 413px;
++}
++
++/* End Experimental */
++
++.hide {
++	display: none;
++}
++
++#gesture_bar_l {
++	width: 18px;
++	height: 300px;
++	position: absolute;
++	top: 0px;
++	left: 0px;
++	z-index: 200000;
++}
++#gesture_bar_r {
++	width: 18px;
++	height: 300px;
++	position: absolute;
++	top: 0px;
++	right: 0px;
++	z-index: 200000;
++}
++
++.menu-subtitle {
++	/*color: #fff;*/
++	/*font-size: 20px;*/
++	/*height: 34px;*/
++	/*margin-bottom: -10px;*/
++}
++
++#dm_date.date {
++	text-align: center;
++	font-size: 18px;
++	color: #fff;
++	margin: 5px 0;
++}
++#dm_battery.batt {
++	text-align: center;
++	font-size: 18px;
++	color: #fff;
++	float: right;
++	/*display: none;*/
++}
++
++#menutabs {
++	height: 48px;
++	/*width: 320px;*/
++	text-align: center;
++}
++
++.toggle-button {
++	display: inline-block;
++	height: 36px;
++	width: 36px;
++	margin: 3px 3px 3px 3px;
++	background-position: center center;
++	background-repeat: no-repeat;
++	background-size: contain;
++	background-image: url(../images/notification-small-sync.png);
++}
++
++.submenu-row {
++	padding-left: 20px;
++}
++
++#toggle-wifi { background-image: url(/usr/palm/applications/com.palm.app.wifi/images/header-icon-wifi.png); }
++#toggle-wifi.on { opacity: 1; }
++#toggle-wifi.off { opacity: .3; }
++#toggle-bt { background-image: url(/usr/palm/applications/com.palm.app.bluetooth/images/header-icon-bluetooth.png); }
++#toggle-bt.on { opacity: 1; }
++#toggle-bt.off { opacity: .3; }
++#toggle-gps { background-image: url(/usr/palm/applications/com.palm.app.location/images/header-icon-location.png); }
++#toggle-gps.on { opacity: 1; }
++#toggle-gps.off { opacity: .3; }
++#toggle-vol { background-image: url(/usr/palm/applications/com.palm.app.soundsandalerts/images/header-icon-soundsandalerts.png); }
++#toggle-vol.on { opacity: 1; }
++#toggle-vol.off { opacity: .3; }
++#toggle-bright { background-image: url(/usr/palm/applications/com.palm.app.screenlock/images/header-icon-screen.png); }
++#toggle-bright.on { opacity: 1; }
++#toggle-bright.off { opacity: .3; }
++#toggle-phone { background-image: url(/usr/palm/applications/com.palm.app.phone/icon.png); }
++#toggle-phone.on { opacity: 1; }
++#toggle-phone.off { opacity: .3; }
++
++#toggle-vpn.on { background-image: url(../images/vpn-status-icon.png); }
++#toggle-vpn.off { background-image: url(../images/vpn-status-icon.png); opacity: .5; display: none;}
++
+ .scrim {
+ 		width: 320px;
+ 		height: 480px;
+\ No newline at end of file
+--- .orig/usr/lib/luna/system/luna-systemui/app/views/devicemenu/devicemenu-scene.html
++++ /usr/lib/luna/system/luna-systemui/app/views/devicemenu/devicemenu-scene.html
+@@ -1,4 +1,6 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
++<div id="gesture_bar_l"></div>
++<div id="gesture_bar_r"></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+ 		
+@@ -1,7 +3,7 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+-		
++
+ 		<div x-mojo-scroll-fade='top' class="palm-popup-fade-top">  
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+@@ -6,6 +8,7 @@
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+ 		</div>
++
+ 		<div x-mojo-scroll-fade='bottom' class="palm-popup-fade-bottom">   
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+@@ -10,29 +13,186 @@
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+ 		</div>
+-		
+-		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller">       
+-			<div class="palm-list">          
+-				
+-				<div class="palm-row first"><div class="palm-row-wrapper">
+-					<div id="dm_date" class="title dim"></div>
+-				</div></div>
+-				
+-				<div class="palm-section-divider">
+-				</div> 
+-				
+-				<div class="palm-row"><div class="palm-row-wrapper">
+-					<div id="dm_battery" class="title dim"></div>
+-				</div></div> 
+-
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="imemsg">&nbsp;</div>
+-						<div class="ime-container">							
+-							<span x-mojo-loc=''>Input Methods</span>    
+-						</div>
++
++		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller"> 
++
++			<div id="dm_date" class="title date"></div>
++
++			<!-- Don't worry, other data divs. Your time will come... -->
++			<div id="dm_battery" class="title batt hide"></div>
++			<div id="dm_temp" class="title hide"></div>
++
++			<div id="menutabs" class="tabs-container">
++				<div id="toggle-wifi" class="toggle-button off"></div>
++				<div id="toggle-bt" class="toggle-button off"></div>
++				<div id="toggle-gps" class="toggle-button off"></div>
++				<div id="toggle-vol" class="toggle-button off"></div>
++				<div id="toggle-bright" class="toggle-button off"></div>
++				<div id="toggle-phone" class="toggle-button off"></div>
++				<div id="toggle-vpn" class="toggle-button off hide"></div>
++			</div>
++
++			<div class="palm-list">
++
++				<!-- Wifi tab -->
++
++				<div id='wifidetails' x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div class="label right" id="wifimsg"></div>                               
++							<div class="wifi-container title">
++								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
++								Wi-Fi
++							</div>
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="wifi_radio" class="title truncating-text"></div>
++					</div></div> 
++					
++					<div class="palm-section-divider"></div>
++
++					<div id="wifilist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
++
++					<div class="palm-section-divider"></div>
++
++					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title">Wi-Fi Preferences</div>
++					</div></div>
++
++				</div>
++
++				<!-- Bluetooth tab -->
++
++				<div id="btdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="btmsg">&nbsp;</div>
++						<div class="wifi-container title">            
++							<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
++							Bluetooth                                         
++						</div>								
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="bt_radio" class="title truncating-text"></div>								
++					</div></div>
++					
++					<div class="palm-section-divider"></div>
++									
++					<div id="btlist" x-mojo-element="IndexedList"></div>
++					
++					<div class="palm-section-divider"></div>					
++					
++					<div class="palm-row" id="bt_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title">Bluetooth Preferences</div>
++					</div></div>
++
++				</div>
++
++				<!-- Location tab -->
++
++				<div id="gpsdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_gps" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="gpsStatus">&nbsp;</div>
++						<div class="title">GPS</div>
++					</div></div>
++
++					<div class="palm-row" id="dm_google" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="googleStatus">&nbsp;</div>
++						<div class="title">Google Services</div>
++					</div></div>
++
++					<div class="palm-row" id="gps_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title">Location Preferences</div>
++					</div></div>
++
++				</div>
++
++				<!-- Brightness tab -->
++
++				<div id="brightdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_brightness" class="title"></div>
++						<div x-mojo-element="Slider" id="brightSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row" id="dm_rotLock" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="rotLockStatus">&nbsp;</div>
++						<div class="title">Rotation Lock</div>
++	 				</div></div>
++
++	 				<div class="palm-row" id="dm_flash" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="flashStatus">&nbsp;</div>
++						<div class="title">Flashlight</div>
++	 				</div></div>
++
++				</div>
++
++				<!-- Volume tab -->
++
++				<div id="voldetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_rvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="rvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_mvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="mvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_svol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="svolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++				</div>
++
++				<!-- Phone tab -->
++
++				<div id="phonedetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="phone_radio" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="phoneStatus" class="label right">&nbsp;</div>
++						<div class="title">Phone Radio</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_data" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dataStatus" class="label right">&nbsp;</div>
++						<div class="title">Data Usage</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_network" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="networkStatus" class="label right">&nbsp;</div>
++						<div class="title">Data Network</div>
++					</div></div>
++
++					<div id="networkdetails" x-mojo-element="Drawer">
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_auto" class="title truncating-text">
++								Automatic
++							</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_2g" class="title truncating-text">
++								Only 2G
++							</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_3g" class="title truncating-text">
++								Only 3G
++							</div>
++						</div></div>
++
+ 					</div>
+ 				</div></div>   
+ 				
+@@ -34,9 +194,37 @@
+ 							<span x-mojo-loc=''>Input Methods</span>    
+ 						</div>
+ 					</div>
+-				</div></div>   
+-				
+-				<div id='imedetails' x-mojo-element="Drawer">
++
++					<div class="palm-row" id="phone_roam" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="roamStatus" class="label right">&nbsp;</div>
++						<div class="title">Roam Only</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_flight" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="flightStatus" class="label right">&nbsp;</div>
++						<div class="title">Airplane Mode</div>
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" id="dm_airplanemode" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dm_airplanemode_status" class="title truncating-text">
++						 </div>
++					</div></div>
++
++				</div>
++
++				<!-- IME tab - Not currently used -->
++
++				<div id='imedetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">
++							<div class="label right" id="imemsg">&nbsp;</div>
++							<div class="ime-container">							
++								<span x-mojo-loc=''>Input Methods</span>    
++							</div>
++						</div>
++					</div></div>
+ 
+ 					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div id="ime_OnOff" class="title truncating-text">
+@@ -58,30 +246,6 @@
+ 					</div></div>  
+ 					
+ 				</div> 
+-				
+-				<div class="palm-section-divider">
+-				</div>               
+-				
+-				<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'>
+-					<div class="palm-row-wrapper">
+-						<div class="title truncating-text">
+-							<div class="label right" id="wifimsg"></div>                               
+-							<div class="wifi-container">
+-								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span x-mojo-loc=''>Wi-Fi</span>
+-							</div>
+-						</div>
+-					</div>
+-				</div>     
+-				
+-				<div id='wifidetails' x-mojo-element="Drawer">
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div id="wifi_radio" class="title truncating-text"></div>
+-						</div>
+-					</div> 
+-					
+-					<div class="palm-section-divider"></div>
+ 
+ 					<div id="wifilist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
+ 
+@@ -83,7 +247,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>
+ 
+-					<div id="wifilist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
++				<!-- VPN tab - Not currently used-->
+ 
+ 					<div class="palm-section-divider"></div>
+ 
+@@ -85,7 +249,7 @@
+ 
+ 					<div id="wifilist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
+ 
+-					<div class="palm-section-divider"></div>
++				<div id='vpndetails' x-mojo-element="Drawer" class="hide">
+ 
+ 					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'>
+ 						<div class="palm-row-wrapper">
+@@ -87,10 +251,11 @@
+ 
+ 					<div class="palm-section-divider"></div>
+ 
+-					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div class="title truncating-text">
+-								<span x-mojo-loc=''>Wi-Fi Preferences</span>
++					<div class="palm-row hide" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">
++							<div class="label right" id="vpnmsg">&nbsp;</div>                               
++							<div class="vpn-container">            
++								<span x-mojo-loc=''>VPN</span>                                          
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -92,22 +257,10 @@
+ 							<div class="title truncating-text">
+ 								<span x-mojo-loc=''>Wi-Fi Preferences</span>
+ 							</div>
+-						</div>
+-					</div>
+-				</div> 
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="vpnmsg">&nbsp;</div>                               
+-						<div class="vpn-container">            
+-							<span x-mojo-loc=''>VPN</span>                                          
+-						</div>
+-					</div>   
+-				</div></div>     
+-				
+-				<div id='vpndetails' x-mojo-element="Drawer">
++						</div>   
++					</div></div>
++
++					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+@@ -109,8 +262,7 @@
+ 				
+ 				<div id='vpndetails' x-mojo-element="Drawer">
+ 									
+-					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
+-					</div>
++					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
+ 					
+ 					<div class="palm-section-divider"></div>				
+ 					
+@@ -112,8 +264,7 @@
+ 					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+ 					
+-					<div class="palm-section-divider"></div>				
+-					
++					<div class="palm-section-divider"></div>
+ 					
+ 					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+@@ -115,7 +266,7 @@
+ 					<div class="palm-section-divider"></div>				
+ 					
+ 					
+-					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
++					<div class="palm-row" id="vpn_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span x-mojo-loc=''>VPN Preferences</span>
+ 						</div>
+@@ -122,50 +273,7 @@
+ 					</div></div>  
+ 					
+ 				</div> 
+-				                           
+-				
+-				<div class="palm-section-divider"></div> 
+-				
+-				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div class="title truncating-text">
+-							<div class="label right" id="btmsg">&nbsp;</div>
+-							<div class="wifi-container">            
+-								<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span x-mojo-loc=''>Bluetooth</span>                                          
+-							</div>				
+-						</div>				
+-				</div></div>
+-				
+-				<div id="btdetails" x-mojo-element="Drawer">
+-					
+-					<div class="palm-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="bt_radio" class="title truncating-text">
+-						</div>								
+-					</div></div>
+-					
+-					<div class="palm-section-divider"></div>
+-									
+-					<div id="btlist" x-mojo-element="IndexedList">
+-					</div>
+-					
+-					<div class="palm-section-divider"></div>					
+-					
+-					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div class="title truncating-text">
+-							<span x-mojo-loc=''>Bluetooth Preferences</span>
+-						</div>
+-					</div></div>
+-					
+-				</div>	
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div id="dm_airplanemode" class="palm-row last menu-end" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div id="dm_airplanemode_status" class="title truncating-text">
+-					 </div>
+-				</div></div>   
+-				
+-				</div>       
+-			</div>
++
++			</div></div>
+ 		</div>
+ </div>                                                   
+ --- .orig/usr/lib/luna/system/luna-systemui/resources/de/views/devicemenu/devicemenu-scene.html
++++ /usr/lib/luna/system/luna-systemui/resources/de/views/devicemenu/devicemenu-scene.html
+@@ -1,4 +1,6 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
++<div id="gesture_bar_l"></div>
++<div id="gesture_bar_r"></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+ 		
+@@ -1,7 +3,7 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+-		
++
+ 		<div x-mojo-scroll-fade='top' class="palm-popup-fade-top">  
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+@@ -6,6 +8,7 @@
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+ 		</div>
++
+ 		<div x-mojo-scroll-fade='bottom' class="palm-popup-fade-bottom">   
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+@@ -10,33 +13,6 @@
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+ 		</div>
+-		
+-		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller">       
+-			<div class="palm-list">          
+-				
+-				<div class="palm-row first"><div class="palm-row-wrapper">
+-					<div id="dm_date" class="title dim"></div>
+-				</div></div>
+-				
+-				<div class="palm-section-divider">
+-				</div> 
+-				
+-				<div class="palm-row"><div class="palm-row-wrapper">
+-					<div id="dm_battery" class="title dim"></div>
+-				</div></div> 
+-
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="imemsg">&nbsp;</div>
+-						<div class="ime-container">							
+-							<span>Eingabemethoden</span>    
+-						</div>
+-					</div>
+-				</div></div>   
+-				
+-				<div id='imedetails' x-mojo-element="Drawer">
+ 
+ 					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div id="ime_OnOff" class="title truncating-text">
+@@ -38,33 +14,31 @@
+ 				
+ 				<div id='imedetails' x-mojo-element="Drawer">
+ 
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="ime_OnOff" class="title truncating-text">
+-						</div>		
+-					</div></div> 
+-					
+-					<div class="palm-section-divider"></div>
+-									
+-					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+-					</div>
+-					
+-					<div class="palm-section-divider"></div>				
+-					
+-					
+-					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+-						<div class="title truncating-text">
+-							<span>IME-Einstellungen</span> 
+-						</div>
+-					</div></div>  
+-					
+-				</div> 
+-				
+-				<div class="palm-section-divider">
+-				</div>               
+-				
+-				<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'>
+-					<div class="palm-row-wrapper">
+-						<div class="title truncating-text">
++		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller"> 
++
++			<div id="dm_date" class="title date"></div>
++
++			<!-- Don't worry, other data divs. Your time will come... -->
++			<div id="dm_battery" class="title batt hide"></div>
++			<div id="dm_temp" class="title hide"></div>
++
++			<div id="menutabs" class="tabs-container">
++				<div id="toggle-wifi" class="toggle-button off"></div>
++				<div id="toggle-bt" class="toggle-button off"></div>
++				<div id="toggle-gps" class="toggle-button off"></div>
++				<div id="toggle-vol" class="toggle-button off"></div>
++				<div id="toggle-bright" class="toggle-button off"></div>
++				<div id="toggle-phone" class="toggle-button off"></div>
++				<div id="toggle-vpn" class="toggle-button off hide"></div>
++			</div>
++
++			<div class="palm-list">
++
++				<!-- Wifi tab -->
++
++				<div id='wifidetails' x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+@@ -66,7 +40,7 @@
+ 					<div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="wifimsg"></div>                               
+-							<div class="wifi-container">
++							<div class="wifi-container title">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>WLAN</span>
+ 							</div>
+@@ -68,7 +42,7 @@
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>WLAN</span>
++								Wi-Fi
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -70,16 +44,12 @@
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>WLAN</span>
+ 							</div>
+-						</div>
+-					</div>
+-				</div>     
+-				
+-				<div id='wifidetails' x-mojo-element="Drawer">
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div id="wifi_radio" class="title truncating-text"></div>
+-						</div>
+-					</div> 
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="wifi_radio" class="title truncating-text"></div>
++					</div></div> 
+ 					
+ 					<div class="palm-section-divider"></div>
+ 
+@@ -87,10 +57,127 @@
+ 
+ 					<div class="palm-section-divider"></div>
+ 
+-					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div class="title truncating-text">
+-								<span>WLAN-Einstellungen</span>
++					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">WiFi-Einstellungen</div>
++					</div></div>
++
++				</div>
++
++				<!-- Bluetooth tab -->
++
++				<div id="btdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="btmsg">&nbsp;</div>
++						<div class="wifi-container title">            
++							<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
++							Bluetooth                                       
++						</div>								
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="bt_radio" class="title truncating-text"></div>								
++					</div></div>
++					
++					<div class="palm-section-divider"></div>
++									
++					<div id="btlist" x-mojo-element="IndexedList"></div>
++					
++					<div class="palm-section-divider"></div>					
++					
++					<div class="palm-row" id="bt_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Bluetooth Einstellungen</div>
++					</div></div>
++
++				</div>
++
++				<!-- Location tab -->
++
++				<div id="gpsdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_gps" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="gpsStatus">&nbsp;</div>
++						<div class="title truncating-text">GPS</div>
++					</div></div>
++
++					<div class="palm-row" id="dm_google" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="googleStatus">&nbsp;</div>
++						<div class="title truncating-text">Google Dienstleistungen</div>
++					</div></div>
++
++					<div class="palm-row" id="gps_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Standort-Einstellungen</div>
++					</div></div>
++
++				</div>
++
++				<!-- Brightness tab -->
++
++				<div id="brightdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_brightness" class="title"></div>
++						<div x-mojo-element="Slider" id="brightSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row" id="dm_rotLock" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="rotLockStatus">&nbsp;</div>
++						<div class="title truncating-text">Drehung-Sperre</div>
++	 				</div></div>
++
++	 				<div class="palm-row" id="dm_flash" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="flashStatus">&nbsp;</div>
++						<div class="title truncating-text">LED-Licht</div>
++	 				</div></div>
++
++				</div>
++
++				<!-- Volume tab -->
++
++				<div id="voldetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_rvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="rvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_mvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="mvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_svol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="svolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++				</div>
++
++				<!-- Phone tab -->
++
++				<div id="phonedetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="phone_radio" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="phoneStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Telefon Radio</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_data" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dataStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Datennutzung</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_network" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="networkStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Netzwerk-Typ</div>
++					</div></div>
++
++					<div id="networkdetails" x-mojo-element="Drawer">
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_auto" class="title truncating-text">
++								Automatische Auswahl
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -92,7 +179,20 @@
+ 							<div class="title truncating-text">
+ 								<span>WLAN-Einstellungen</span>
+ 							</div>
+-						</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_2g" class="title truncating-text">
++								Nur 2G
++							</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_3g" class="title truncating-text">
++								Nur 3G
++							</div>
++						</div></div>
++
+ 					</div>
+ 				</div> 
+ 				
+@@ -94,15 +194,35 @@
+ 							</div>
+ 						</div>
+ 					</div>
+-				</div> 
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="vpnmsg">&nbsp;</div>                               
+-						<div class="vpn-container">            
+-							<span>VPN</span>                                          
++
++					<div class="palm-row" id="phone_roam" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="roamStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Nur durchstreifen</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_flight" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="flightStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Flugzeug-Modus</div>
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" id="dm_airplanemode" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dm_airplanemode_status" class="title truncating-text">
++						 </div>
++					</div></div>
++
++				</div>
++
++				<!-- IME tab - Not currently used -->
++
++				<div id='imedetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">
++							<div class="label right" id="imemsg">&nbsp;</div>
++							<div class="ime-container">							
++								<span x-mojo-loc=''>Eingabemethoden</span>    
++							</div>
+ 						</div>
+ 					</div>   
+ 				</div></div>     
+@@ -104,10 +224,14 @@
+ 						<div class="vpn-container">            
+ 							<span>VPN</span>                                          
+ 						</div>
+-					</div>   
+-				</div></div>     
+-				
+-				<div id='vpndetails' x-mojo-element="Drawer">
++					</div></div>
++
++					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="ime_OnOff" class="title truncating-text">
++						</div>		
++					</div></div> 
++					
++					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+@@ -109,7 +233,7 @@
+ 				
+ 				<div id='vpndetails' x-mojo-element="Drawer">
+ 									
+-					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
++					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+ 					
+ 					<div class="palm-section-divider"></div>				
+@@ -115,7 +239,7 @@
+ 					<div class="palm-section-divider"></div>				
+ 					
+ 					
+-					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
++					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>VPN-Einstellungen</span>
+ 						</div>
+@@ -117,7 +241,7 @@
+ 					
+ 					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+-							<span>VPN-Einstellungen</span>
++							<span x-mojo-loc=''>IME-Einstellungen</span> 
+ 						</div>
+ 					</div></div>  
+ 					
+@@ -122,11 +246,12 @@
+ 					</div></div>  
+ 					
+ 				</div> 
+-				                           
+-				
+-				<div class="palm-section-divider"></div> 
+-				
+-				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++
++				<!-- VPN tab - Not currently used-->
++
++				<div id='vpndetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row hide" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="btmsg">&nbsp;</div>
+ 							<div class="wifi-container">            
+@@ -128,19 +253,11 @@
+ 				
+ 				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<div class="label right" id="btmsg">&nbsp;</div>
+-							<div class="wifi-container">            
+-								<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>Bluetooth</span>                                          
+-							</div>				
+-						</div>				
+-				</div></div>
+-				
+-				<div id="btdetails" x-mojo-element="Drawer">
+-					
+-					<div class="palm-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="bt_radio" class="title truncating-text">
+-						</div>								
++							<div class="label right" id="vpnmsg">&nbsp;</div>                               
++							<div class="vpn-container">            
++								<span x-mojo-loc=''>VPN</span>                                          
++							</div>
++						</div>   
+ 					</div></div>
+ 					
+ 					<div class="palm-section-divider"></div>
+@@ -142,7 +259,7 @@
+ 						<div id="bt_radio" class="title truncating-text">
+ 						</div>								
+ 					</div></div>
+-					
++
+ 					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="btlist" x-mojo-element="IndexedList">
+@@ -145,8 +262,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>
+ 									
+-					<div id="btlist" x-mojo-element="IndexedList">
+-					</div>
++					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+@@ -148,7 +264,7 @@
+ 					<div id="btlist" x-mojo-element="IndexedList">
+ 					</div>
+ 					
+-					<div class="palm-section-divider"></div>					
++					<div class="palm-section-divider"></div>
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+@@ -150,7 +266,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+-					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++					<div class="palm-row" id="vpn_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>Bluetooth-Einstellungen</span>
+ 						</div>
+@@ -152,7 +268,7 @@
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<span>Bluetooth-Einstellungen</span>
++							<span x-mojo-loc=''>VPN-Einstellungen</span>
+ 						</div>
+ 					</div></div>
+ 					
+@@ -154,7 +270,7 @@
+ 						<div class="title truncating-text">
+ 							<span>Bluetooth-Einstellungen</span>
+ 						</div>
+-					</div></div>
++					</div></div>  
+ 					
+ 				</div>	
+ 				
+@@ -156,16 +272,8 @@
+ 						</div>
+ 					</div></div>
+ 					
+-				</div>	
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div id="dm_airplanemode" class="palm-row last menu-end" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div id="dm_airplanemode_status" class="title truncating-text">
+-					 </div>
+-				</div></div>   
+-				
+-				</div>       
+-			</div>
++				</div> 
++
++			</div></div>
+ 		</div>
+ </div>                                                 
+--- .orig/usr/lib/luna/system/luna-systemui/resources/es/views/devicemenu/devicemenu-scene.html
++++ /usr/lib/luna/system/luna-systemui/resources/es/views/devicemenu/devicemenu-scene.html
+@@ -1,4 +1,6 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
++<div id="gesture_bar_l"></div>
++<div id="gesture_bar_r"></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+ 		
+@@ -1,7 +3,7 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+-		
++
+ 		<div x-mojo-scroll-fade='top' class="palm-popup-fade-top">  
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+@@ -6,6 +8,7 @@
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+ 		</div>
++
+ 		<div x-mojo-scroll-fade='bottom' class="palm-popup-fade-bottom">   
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+@@ -10,33 +13,6 @@
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+ 		</div>
+-		
+-		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller">       
+-			<div class="palm-list">          
+-				
+-				<div class="palm-row first"><div class="palm-row-wrapper">
+-					<div id="dm_date" class="title dim"></div>
+-				</div></div>
+-				
+-				<div class="palm-section-divider">
+-				</div> 
+-				
+-				<div class="palm-row"><div class="palm-row-wrapper">
+-					<div id="dm_battery" class="title dim"></div>
+-				</div></div> 
+-
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="imemsg">&nbsp;</div>
+-						<div class="ime-container">							
+-							<span>Métodos de entrada</span>    
+-						</div>
+-					</div>
+-				</div></div>   
+-				
+-				<div id='imedetails' x-mojo-element="Drawer">
+ 
+ 					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div id="ime_OnOff" class="title truncating-text">
+@@ -38,33 +14,31 @@
+ 				
+ 				<div id='imedetails' x-mojo-element="Drawer">
+ 
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="ime_OnOff" class="title truncating-text">
+-						</div>		
+-					</div></div> 
+-					
+-					<div class="palm-section-divider"></div>
+-									
+-					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+-					</div>
+-					
+-					<div class="palm-section-divider"></div>				
+-					
+-					
+-					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+-						<div class="title truncating-text">
+-							<span>Preferencias de IME</span> 
+-						</div>
+-					</div></div>  
+-					
+-				</div> 
+-				
+-				<div class="palm-section-divider">
+-				</div>               
+-				
+-				<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'>
+-					<div class="palm-row-wrapper">
+-						<div class="title truncating-text">
++		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller"> 
++
++			<div id="dm_date" class="title date"></div>
++
++			<!-- Don't worry, other data divs. Your time will come... -->
++			<div id="dm_battery" class="title batt hide"></div>
++			<div id="dm_temp" class="title hide"></div>
++
++			<div id="menutabs" class="tabs-container">
++				<div id="toggle-wifi" class="toggle-button off"></div>
++				<div id="toggle-bt" class="toggle-button off"></div>
++				<div id="toggle-gps" class="toggle-button off"></div>
++				<div id="toggle-vol" class="toggle-button off"></div>
++				<div id="toggle-bright" class="toggle-button off"></div>
++				<div id="toggle-phone" class="toggle-button off"></div>
++				<div id="toggle-vpn" class="toggle-button off hide"></div>
++			</div>
++
++			<div class="palm-list">
++
++				<!-- Wifi tab -->
++
++				<div id='wifidetails' x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+@@ -66,7 +40,7 @@
+ 					<div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="wifimsg"></div>                               
+-							<div class="wifi-container">
++							<div class="wifi-container title">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>Wi-Fi</span>
+ 							</div>
+@@ -68,7 +42,7 @@
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>Wi-Fi</span>
++								Wi-Fi
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -70,16 +44,12 @@
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>Wi-Fi</span>
+ 							</div>
+-						</div>
+-					</div>
+-				</div>     
+-				
+-				<div id='wifidetails' x-mojo-element="Drawer">
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div id="wifi_radio" class="title truncating-text"></div>
+-						</div>
+-					</div> 
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="wifi_radio" class="title truncating-text"></div>
++					</div></div> 
+ 					
+ 					<div class="palm-section-divider"></div>
+ 
+@@ -87,10 +57,127 @@
+ 
+ 					<div class="palm-section-divider"></div>
+ 
+-					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div class="title truncating-text">
+-								<span>Preferencias de Wi-Fi</span>
++					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Preferencias de Wi-Fi</div>
++					</div></div>
++
++				</div>
++
++				<!-- Bluetooth tab -->
++
++				<div id="btdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="btmsg">&nbsp;</div>
++						<div class="wifi-container title">            
++							<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
++							Bluetooth                                         
++						</div>								
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="bt_radio" class="title truncating-text"></div>								
++					</div></div>
++					
++					<div class="palm-section-divider"></div>
++									
++					<div id="btlist" x-mojo-element="IndexedList"></div>
++					
++					<div class="palm-section-divider"></div>					
++					
++					<div class="palm-row" id="bt_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Preferencias de Bluetooth</div>
++					</div></div>
++
++				</div>
++
++				<!-- Location tab -->
++
++				<div id="gpsdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_gps" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="gpsStatus">&nbsp;</div>
++						<div class="title truncating-text">GPS</div>
++					</div></div>
++
++					<div class="palm-row" id="dm_google" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="googleStatus">&nbsp;</div>
++						<div class="title truncating-text">Servicios de Google</div>
++					</div></div>
++
++					<div class="palm-row" id="gps_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Preferencias de ubicación</div>
++					</div></div>
++
++				</div>
++
++				<!-- Brightness tab -->
++
++				<div id="brightdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_brightness" class="title"></div>
++						<div x-mojo-element="Slider" id="brightSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row" id="dm_rotLock" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="rotLockStatus">&nbsp;</div>
++						<div class="title truncating-text">Bloqueo de rotación</div>
++	 				</div></div>
++
++	 				<div class="palm-row" id="dm_flash" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="flashStatus">&nbsp;</div>
++						<div class="title truncating-text">Linterna</div>
++	 				</div></div>
++
++				</div>
++
++				<!-- Volume tab -->
++
++				<div id="voldetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_rvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="rvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_mvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="mvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_svol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="svolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++				</div>
++
++				<!-- Phone tab -->
++
++				<div id="phonedetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="phone_radio" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="phoneStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Teléfono Radio</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_data" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dataStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Uso de datos</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_network" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="networkStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Red de datos</div>
++					</div></div>
++
++					<div id="networkdetails" x-mojo-element="Drawer">
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_auto" class="title truncating-text">
++								Automático
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -92,7 +179,20 @@
+ 							<div class="title truncating-text">
+ 								<span>Preferencias de Wi-Fi</span>
+ 							</div>
+-						</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_2g" class="title truncating-text">
++								Sólo 2 G
++							</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_3g" class="title truncating-text">
++								Sólo 3 G
++							</div>
++						</div></div>
++
+ 					</div>
+ 				</div> 
+ 				
+@@ -94,15 +194,35 @@
+ 							</div>
+ 						</div>
+ 					</div>
+-				</div> 
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="vpnmsg">&nbsp;</div>                               
+-						<div class="vpn-container">            
+-							<span>VPN</span>                                          
++
++					<div class="palm-row" id="phone_roam" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="roamStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Roam sólo</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_flight" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="flightStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Modo avión</div>
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" id="dm_airplanemode" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dm_airplanemode_status" class="title truncating-text">
++						 </div>
++					</div></div>
++
++				</div>
++
++				<!-- IME tab - Not currently used -->
++
++				<div id='imedetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">
++							<div class="label right" id="imemsg">&nbsp;</div>
++							<div class="ime-container">							
++								<span x-mojo-loc=''>Input Methods</span>    
++							</div>
+ 						</div>
+ 					</div>   
+ 				</div></div>     
+@@ -104,10 +224,14 @@
+ 						<div class="vpn-container">            
+ 							<span>VPN</span>                                          
+ 						</div>
+-					</div>   
+-				</div></div>     
+-				
+-				<div id='vpndetails' x-mojo-element="Drawer">
++					</div></div>
++
++					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="ime_OnOff" class="title truncating-text">
++						</div>		
++					</div></div> 
++					
++					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+@@ -109,7 +233,7 @@
+ 				
+ 				<div id='vpndetails' x-mojo-element="Drawer">
+ 									
+-					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
++					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+ 					
+ 					<div class="palm-section-divider"></div>				
+@@ -115,7 +239,7 @@
+ 					<div class="palm-section-divider"></div>				
+ 					
+ 					
+-					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
++					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>Preferencias de VPN</span>
+ 						</div>
+@@ -117,7 +241,7 @@
+ 					
+ 					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+-							<span>Preferencias de VPN</span>
++							<span x-mojo-loc=''>IME Preferences</span> 
+ 						</div>
+ 					</div></div>  
+ 					
+@@ -122,11 +246,12 @@
+ 					</div></div>  
+ 					
+ 				</div> 
+-				                           
+-				
+-				<div class="palm-section-divider"></div> 
+-				
+-				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++
++				<!-- VPN tab - Not currently used-->
++
++				<div id='vpndetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row hide" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="btmsg">&nbsp;</div>
+ 							<div class="wifi-container">            
+@@ -128,19 +253,11 @@
+ 				
+ 				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<div class="label right" id="btmsg">&nbsp;</div>
+-							<div class="wifi-container">            
+-								<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>Bluetooth</span>                                          
+-							</div>				
+-						</div>				
+-				</div></div>
+-				
+-				<div id="btdetails" x-mojo-element="Drawer">
+-					
+-					<div class="palm-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="bt_radio" class="title truncating-text">
+-						</div>								
++							<div class="label right" id="vpnmsg">&nbsp;</div>                               
++							<div class="vpn-container">            
++								<span x-mojo-loc=''>VPN</span>                                          
++							</div>
++						</div>   
+ 					</div></div>
+ 					
+ 					<div class="palm-section-divider"></div>
+@@ -142,7 +259,7 @@
+ 						<div id="bt_radio" class="title truncating-text">
+ 						</div>								
+ 					</div></div>
+-					
++
+ 					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="btlist" x-mojo-element="IndexedList">
+@@ -145,8 +262,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>
+ 									
+-					<div id="btlist" x-mojo-element="IndexedList">
+-					</div>
++					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+@@ -148,7 +264,7 @@
+ 					<div id="btlist" x-mojo-element="IndexedList">
+ 					</div>
+ 					
+-					<div class="palm-section-divider"></div>					
++					<div class="palm-section-divider"></div>
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+@@ -150,7 +266,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+-					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++					<div class="palm-row" id="vpn_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>Preferencias de Bluetooth</span>
+ 						</div>
+@@ -152,7 +268,7 @@
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<span>Preferencias de Bluetooth</span>
++							<span x-mojo-loc=''>VPN Preferences</span>
+ 						</div>
+ 					</div></div>
+ 					
+@@ -154,7 +270,7 @@
+ 						<div class="title truncating-text">
+ 							<span>Preferencias de Bluetooth</span>
+ 						</div>
+-					</div></div>
++					</div></div>  
+ 					
+ 				</div>	
+ 				
+@@ -156,16 +272,8 @@
+ 						</div>
+ 					</div></div>
+ 					
+-				</div>	
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div id="dm_airplanemode" class="palm-row last menu-end" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div id="dm_airplanemode_status" class="title truncating-text">
+-					 </div>
+-				</div></div>   
+-				
+-				</div>       
+-			</div>
++				</div> 
++
++			</div></div>
+ 		</div>
+ </div>                                                   
+--- .orig/usr/lib/luna/system/luna-systemui/resources/fr/views/devicemenu/devicemenu-scene.html
++++ /usr/lib/luna/system/luna-systemui/resources/fr/views/devicemenu/devicemenu-scene.html
+@@ -1,4 +1,6 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
++<div id="gesture_bar_l"></div>
++<div id="gesture_bar_r"></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+ 		
+@@ -1,7 +3,7 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+-		
++
+ 		<div x-mojo-scroll-fade='top' class="palm-popup-fade-top">  
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+@@ -6,6 +8,7 @@
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+ 		</div>
++
+ 		<div x-mojo-scroll-fade='bottom' class="palm-popup-fade-bottom">   
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+@@ -10,33 +13,6 @@
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+ 		</div>
+-		
+-		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller">       
+-			<div class="palm-list">          
+-				
+-				<div class="palm-row first"><div class="palm-row-wrapper">
+-					<div id="dm_date" class="title dim"></div>
+-				</div></div>
+-				
+-				<div class="palm-section-divider">
+-				</div> 
+-				
+-				<div class="palm-row"><div class="palm-row-wrapper">
+-					<div id="dm_battery" class="title dim"></div>
+-				</div></div> 
+-
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="imemsg">&nbsp;</div>
+-						<div class="ime-container">							
+-							<span>Méthodes de saisie</span>    
+-						</div>
+-					</div>
+-				</div></div>   
+-				
+-				<div id='imedetails' x-mojo-element="Drawer">
+ 
+ 					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div id="ime_OnOff" class="title truncating-text">
+@@ -38,33 +14,31 @@
+ 				
+ 				<div id='imedetails' x-mojo-element="Drawer">
+ 
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="ime_OnOff" class="title truncating-text">
+-						</div>		
+-					</div></div> 
+-					
+-					<div class="palm-section-divider"></div>
+-									
+-					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+-					</div>
+-					
+-					<div class="palm-section-divider"></div>				
+-					
+-					
+-					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+-						<div class="title truncating-text">
+-							<span>Préférences IME</span> 
+-						</div>
+-					</div></div>  
+-					
+-				</div> 
+-				
+-				<div class="palm-section-divider">
+-				</div>               
+-				
+-				<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'>
+-					<div class="palm-row-wrapper">
+-						<div class="title truncating-text">
++		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller"> 
++
++			<div id="dm_date" class="title date"></div>
++
++			<!-- Don't worry, other data divs. Your time will come... -->
++			<div id="dm_battery" class="title batt hide"></div>
++			<div id="dm_temp" class="title hide"></div>
++
++			<div id="menutabs" class="tabs-container">
++				<div id="toggle-wifi" class="toggle-button off"></div>
++				<div id="toggle-bt" class="toggle-button off"></div>
++				<div id="toggle-gps" class="toggle-button off"></div>
++				<div id="toggle-vol" class="toggle-button off"></div>
++				<div id="toggle-bright" class="toggle-button off"></div>
++				<div id="toggle-phone" class="toggle-button off"></div>
++				<div id="toggle-vpn" class="toggle-button off hide"></div>
++			</div>
++
++			<div class="palm-list">
++
++				<!-- Wifi tab -->
++
++				<div id='wifidetails' x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+@@ -66,7 +40,7 @@
+ 					<div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="wifimsg"></div>                               
+-							<div class="wifi-container">
++							<div class="wifi-container title">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>Wi-Fi</span>
+ 							</div>
+@@ -68,7 +42,7 @@
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>Wi-Fi</span>
++								Wi-Fi
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -70,16 +44,12 @@
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>Wi-Fi</span>
+ 							</div>
+-						</div>
+-					</div>
+-				</div>     
+-				
+-				<div id='wifidetails' x-mojo-element="Drawer">
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div id="wifi_radio" class="title truncating-text"></div>
+-						</div>
+-					</div> 
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="wifi_radio" class="title truncating-text"></div>
++					</div></div> 
+ 					
+ 					<div class="palm-section-divider"></div>
+ 
+@@ -87,10 +57,127 @@
+ 
+ 					<div class="palm-section-divider"></div>
+ 
+-					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div class="title truncating-text">
+-								<span>Préférences pour Wi-Fi</span>
++					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Préférences Wi-Fi</div>
++					</div></div>
++
++				</div>
++
++				<!-- Bluetooth tab -->
++
++				<div id="btdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="btmsg">&nbsp;</div>
++						<div class="wifi-container title">            
++							<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
++							Bluetooth                                         
++						</div>								
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="bt_radio" class="title truncating-text"></div>								
++					</div></div>
++					
++					<div class="palm-section-divider"></div>
++									
++					<div id="btlist" x-mojo-element="IndexedList"></div>
++					
++					<div class="palm-section-divider"></div>					
++					
++					<div class="palm-row" id="bt_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Préférences Bluetooth</div>
++					</div></div>
++
++				</div>
++
++				<!-- Location tab -->
++
++				<div id="gpsdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_gps" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="gpsStatus">&nbsp;</div>
++						<div class="title truncating-text">GPS</div>
++					</div></div>
++
++					<div class="palm-row" id="dm_google" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="googleStatus">&nbsp;</div>
++						<div class="title truncating-text">Services Google</div>
++					</div></div>
++
++					<div class="palm-row" id="gps_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Préférences d'emplacement</div>
++					</div></div>
++
++				</div>
++
++				<!-- Brightness tab -->
++
++				<div id="brightdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_brightness" class="title"></div>
++						<div x-mojo-element="Slider" id="brightSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row" id="dm_rotLock" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="rotLockStatus">&nbsp;</div>
++						<div class="title truncating-text">Verrouillage de la rotation</div>
++	 				</div></div>
++
++	 				<div class="palm-row" id="dm_flash" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="flashStatus">&nbsp;</div>
++						<div class="title truncating-text">Lampe de poche</div>
++	 				</div></div>
++
++				</div>
++
++				<!-- Volume tab -->
++
++				<div id="voldetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_rvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="rvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_mvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="mvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_svol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="svolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++				</div>
++
++				<!-- Phone tab -->
++
++				<div id="phonedetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="phone_radio" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="phoneStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Radio téléphone</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_data" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dataStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Utilisation des données</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_network" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="networkStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Réseau de données</div>
++					</div></div>
++
++					<div id="networkdetails" x-mojo-element="Drawer">
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_auto" class="title truncating-text">
++								Automatique
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -92,7 +179,20 @@
+ 							<div class="title truncating-text">
+ 								<span>Préférences pour Wi-Fi</span>
+ 							</div>
+-						</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_2g" class="title truncating-text">
++								Seulement 2G
++							</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_3g" class="title truncating-text">
++								Seulement 3G
++							</div>
++						</div></div>
++
+ 					</div>
+ 				</div> 
+ 				
+@@ -94,15 +194,35 @@
+ 							</div>
+ 						</div>
+ 					</div>
+-				</div> 
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="vpnmsg">&nbsp;</div>                               
+-						<div class="vpn-container">            
+-							<span>VPN</span>                                          
++
++					<div class="palm-row" id="phone_roam" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="roamStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Roam uniquement</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_flight" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="flightStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Mode avion</div>
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" id="dm_airplanemode" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dm_airplanemode_status" class="title truncating-text">
++						 </div>
++					</div></div>
++
++				</div>
++
++				<!-- IME tab - Not currently used -->
++
++				<div id='imedetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">
++							<div class="label right" id="imemsg">&nbsp;</div>
++							<div class="ime-container">							
++								<span x-mojo-loc=''>Input Methods</span>    
++							</div>
+ 						</div>
+ 					</div>   
+ 				</div></div>     
+@@ -104,10 +224,14 @@
+ 						<div class="vpn-container">            
+ 							<span>VPN</span>                                          
+ 						</div>
+-					</div>   
+-				</div></div>     
+-				
+-				<div id='vpndetails' x-mojo-element="Drawer">
++					</div></div>
++
++					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="ime_OnOff" class="title truncating-text">
++						</div>		
++					</div></div> 
++					
++					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+@@ -109,7 +233,7 @@
+ 				
+ 				<div id='vpndetails' x-mojo-element="Drawer">
+ 									
+-					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
++					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+ 					
+ 					<div class="palm-section-divider"></div>				
+@@ -115,7 +239,7 @@
+ 					<div class="palm-section-divider"></div>				
+ 					
+ 					
+-					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
++					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>Préférences VPN</span>
+ 						</div>
+@@ -117,7 +241,7 @@
+ 					
+ 					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+-							<span>Préférences VPN</span>
++							<span x-mojo-loc=''>IME Preferences</span> 
+ 						</div>
+ 					</div></div>  
+ 					
+@@ -122,11 +246,12 @@
+ 					</div></div>  
+ 					
+ 				</div> 
+-				                           
+-				
+-				<div class="palm-section-divider"></div> 
+-				
+-				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++
++				<!-- VPN tab - Not currently used-->
++
++				<div id='vpndetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row hide" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="btmsg">&nbsp;</div>
+ 							<div class="wifi-container">            
+@@ -128,19 +253,11 @@
+ 				
+ 				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<div class="label right" id="btmsg">&nbsp;</div>
+-							<div class="wifi-container">            
+-								<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>Bluetooth</span>                                          
+-							</div>				
+-						</div>				
+-				</div></div>
+-				
+-				<div id="btdetails" x-mojo-element="Drawer">
+-					
+-					<div class="palm-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="bt_radio" class="title truncating-text">
+-						</div>								
++							<div class="label right" id="vpnmsg">&nbsp;</div>                               
++							<div class="vpn-container">            
++								<span x-mojo-loc=''>VPN</span>                                          
++							</div>
++						</div>   
+ 					</div></div>
+ 					
+ 					<div class="palm-section-divider"></div>
+@@ -142,7 +259,7 @@
+ 						<div id="bt_radio" class="title truncating-text">
+ 						</div>								
+ 					</div></div>
+-					
++
+ 					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="btlist" x-mojo-element="IndexedList">
+@@ -145,8 +262,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>
+ 									
+-					<div id="btlist" x-mojo-element="IndexedList">
+-					</div>
++					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+@@ -148,7 +264,7 @@
+ 					<div id="btlist" x-mojo-element="IndexedList">
+ 					</div>
+ 					
+-					<div class="palm-section-divider"></div>					
++					<div class="palm-section-divider"></div>
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+@@ -150,7 +266,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+-					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++					<div class="palm-row" id="vpn_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>Préférences pour Bluetooth</span>
+ 						</div>
+@@ -152,7 +268,7 @@
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<span>Préférences pour Bluetooth</span>
++							<span x-mojo-loc=''>VPN Preferences</span>
+ 						</div>
+ 					</div></div>
+ 					
+@@ -154,7 +270,7 @@
+ 						<div class="title truncating-text">
+ 							<span>Préférences pour Bluetooth</span>
+ 						</div>
+-					</div></div>
++					</div></div>  
+ 					
+ 				</div>	
+ 				
+@@ -156,16 +272,8 @@
+ 						</div>
+ 					</div></div>
+ 					
+-				</div>	
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div id="dm_airplanemode" class="palm-row last menu-end" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div id="dm_airplanemode_status" class="title truncating-text">
+-					 </div>
+-				</div></div>   
+-				
+-				</div>       
+-			</div>
++				</div> 
++
++			</div></div>
+ 		</div>
+ </div>                                                 
+--- .orig/usr/lib/luna/system/luna-systemui/resources/it/views/devicemenu/devicemenu-scene.html
++++ /usr/lib/luna/system/luna-systemui/resources/it/views/devicemenu/devicemenu-scene.html
+@@ -1,4 +1,6 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
++<div id="gesture_bar_l"></div>
++<div id="gesture_bar_r"></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+ 		
+@@ -1,7 +3,7 @@
+ <div id="scrim" class="palm-scrim" x-mojo-scrim=""></div>
+ <div id='palm-device-menu' class='palm-popup-container' x-mojo-dialog="">           
+ 	<div class="palm-popup-wrapper">  
+-		
++
+ 		<div x-mojo-scroll-fade='top' class="palm-popup-fade-top">  
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+@@ -6,6 +8,7 @@
+ 			<div class="fade-background"></div>                     
+ 			<div class="fade-arrow"></div>          
+ 		</div>
++
+ 		<div x-mojo-scroll-fade='bottom' class="palm-popup-fade-bottom">   
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+@@ -10,33 +13,6 @@
+ 			<div class="fade-background"></div>                           
+ 			<div class="fade-arrow"></div>
+ 		</div>
+-		
+-		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller">       
+-			<div class="palm-list">          
+-				
+-				<div class="palm-row first"><div class="palm-row-wrapper">
+-					<div id="dm_date" class="title dim"></div>
+-				</div></div>
+-				
+-				<div class="palm-section-divider">
+-				</div> 
+-				
+-				<div class="palm-row"><div class="palm-row-wrapper">
+-					<div id="dm_battery" class="title dim"></div>
+-				</div></div> 
+-
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="imemsg">&nbsp;</div>
+-						<div class="ime-container">							
+-							<span>Metodi di input</span>    
+-						</div>
+-					</div>
+-				</div></div>   
+-				
+-				<div id='imedetails' x-mojo-element="Drawer">
+ 
+ 					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div id="ime_OnOff" class="title truncating-text">
+@@ -38,33 +14,31 @@
+ 				
+ 				<div id='imedetails' x-mojo-element="Drawer">
+ 
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="ime_OnOff" class="title truncating-text">
+-						</div>		
+-					</div></div> 
+-					
+-					<div class="palm-section-divider"></div>
+-									
+-					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+-					</div>
+-					
+-					<div class="palm-section-divider"></div>				
+-					
+-					
+-					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+-						<div class="title truncating-text">
+-							<span>Preferenze IME</span> 
+-						</div>
+-					</div></div>  
+-					
+-				</div> 
+-				
+-				<div class="palm-section-divider">
+-				</div>               
+-				
+-				<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'>
+-					<div class="palm-row-wrapper">
+-						<div class="title truncating-text">
++		<div id="devicescroller" class="palm-popup-content" x-mojo-element="Scroller"> 
++
++			<div id="dm_date" class="title date"></div>
++
++			<!-- Don't worry, other data divs. Your time will come... -->
++			<div id="dm_battery" class="title batt hide"></div>
++			<div id="dm_temp" class="title hide"></div>
++
++			<div id="menutabs" class="tabs-container">
++				<div id="toggle-wifi" class="toggle-button off"></div>
++				<div id="toggle-bt" class="toggle-button off"></div>
++				<div id="toggle-gps" class="toggle-button off"></div>
++				<div id="toggle-vol" class="toggle-button off"></div>
++				<div id="toggle-bright" class="toggle-button off"></div>
++				<div id="toggle-phone" class="toggle-button off"></div>
++				<div id="toggle-vpn" class="toggle-button off hide"></div>
++			</div>
++
++			<div class="palm-list">
++
++				<!-- Wifi tab -->
++
++				<div id='wifidetails' x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_wifi" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+@@ -66,7 +40,7 @@
+ 					<div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="wifimsg"></div>                               
+-							<div class="wifi-container">
++							<div class="wifi-container title">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>Wi-Fi</span>
+ 							</div>
+@@ -68,7 +42,7 @@
+ 							<div class="label right" id="wifimsg"></div>                               
+ 							<div class="wifi-container">
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>Wi-Fi</span>
++								Wi-Fi
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -70,16 +44,12 @@
+ 								<div id='wifiSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+ 								<span>Wi-Fi</span>
+ 							</div>
+-						</div>
+-					</div>
+-				</div>     
+-				
+-				<div id='wifidetails' x-mojo-element="Drawer">
+-					<div class="palm-row first" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div id="wifi_radio" class="title truncating-text"></div>
+-						</div>
+-					</div> 
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="wifi_radio" class="title truncating-text"></div>
++					</div></div> 
+ 					
+ 					<div class="palm-section-divider"></div>
+ 
+@@ -87,10 +57,127 @@
+ 
+ 					<div class="palm-section-divider"></div>
+ 
+-					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'>
+-						<div class="palm-row-wrapper">
+-							<div class="title truncating-text">
+-								<span>Preferenze Wi-Fi</span>
++					<div id="wifi_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Preferenze Wi-Fi</div>
++					</div></div>
++
++				</div>
++
++				<!-- Bluetooth tab -->
++
++				<div id="btdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="btmsg">&nbsp;</div>
++						<div class="wifi-container title">            
++							<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
++							Bluetooth                                         
++						</div>								
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="bt_radio" class="title truncating-text"></div>								
++					</div></div>
++					
++					<div class="palm-section-divider"></div>
++									
++					<div id="btlist" x-mojo-element="IndexedList"></div>
++					
++					<div class="palm-section-divider"></div>					
++					
++					<div class="palm-row" id="bt_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Preferenze Bluetooth</div>
++					</div></div>
++
++				</div>
++
++				<!-- Location tab -->
++
++				<div id="gpsdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="dm_gps" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="gpsStatus">&nbsp;</div>
++						<div class="title truncating-text">GPS</div>
++					</div></div>
++
++					<div class="palm-row" id="dm_google" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="googleStatus">&nbsp;</div>
++						<div class="title truncating-text">Servizi Google</div>
++					</div></div>
++
++					<div class="palm-row" id="gps_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">Preferenze di posizione</div>
++					</div></div>
++
++				</div>
++
++				<!-- Brightness tab -->
++
++				<div id="brightdetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_brightness" class="title"></div>
++						<div x-mojo-element="Slider" id="brightSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row" id="dm_rotLock" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="rotLockStatus">&nbsp;</div>
++						<div class="title truncating-text">Blocco della rotazione</div>
++	 				</div></div>
++
++	 				<div class="palm-row" id="dm_flash" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="label right" id="flashStatus">&nbsp;</div>
++						<div class="title truncating-text">Torcia elettrica</div>
++	 				</div></div>
++
++				</div>
++
++				<!-- Volume tab -->
++
++				<div id="voldetails" x-mojo-element="Drawer">
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_rvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="rvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_mvol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="mvolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++					<div class="palm-row"><div class="palm-row-wrapper">
++						<div id="dm_svol" class="title menu-subtitle"></div>
++						<div x-mojo-element="Slider" id="svolSlider" style="padding-top: 0px; height: 40px;"></div>
++					</div></div>
++
++				</div>
++
++				<!-- Phone tab -->
++
++				<div id="phonedetails" x-mojo-element="Drawer">
++
++					<div class="palm-row" id="phone_radio" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="phoneStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Telefono Radio</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_data" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dataStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Utilizzo dei dati</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_network" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="networkStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Rete dati</div>
++					</div></div>
++
++					<div id="networkdetails" x-mojo-element="Drawer">
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_auto" class="title truncating-text">
++								Automatico
+ 							</div>
+ 						</div>
+ 					</div>
+@@ -92,7 +179,20 @@
+ 							<div class="title truncating-text">
+ 								<span>Preferenze Wi-Fi</span>
+ 							</div>
+-						</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_2g" class="title truncating-text">
++								Solo 2G
++							</div>
++						</div></div>
++
++						<div class="palm-row submenu-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++							<div id="network_3g" class="title truncating-text">
++								Solo 3G
++							</div>
++						</div></div>
++
+ 					</div>
+ 				</div> 
+ 				
+@@ -94,15 +194,35 @@
+ 							</div>
+ 						</div>
+ 					</div>
+-				</div> 
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div class="palm-row" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div class="title truncating-text">
+-						<div class="label right" id="vpnmsg">&nbsp;</div>                               
+-						<div class="vpn-container">            
+-							<span>VPN</span>                                          
++
++					<div class="palm-row" id="phone_roam" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="roamStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Vagare solo</div>
++					</div></div>
++
++					<div class="palm-row" id="phone_flight" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="flightStatus" class="label right">&nbsp;</div>
++						<div class="title truncating-text">Modalità aeroplano</div>
++					</div></div>
++
++					<!-- TODO: Remove references in devicemenu-assistant and get rid of this block -->
++					<div class="palm-row hide" id="dm_airplanemode" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="dm_airplanemode_status" class="title truncating-text">
++						 </div>
++					</div></div>
++
++				</div>
++
++				<!-- IME tab - Not currently used -->
++
++				<div id='imedetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row" id="dm_ime" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div class="title truncating-text">
++							<div class="label right" id="imemsg">&nbsp;</div>
++							<div class="ime-container">							
++								<span x-mojo-loc=''>Input Methods</span>    
++							</div>
+ 						</div>
+ 					</div>   
+ 				</div></div>     
+@@ -104,10 +224,14 @@
+ 						<div class="vpn-container">            
+ 							<span>VPN</span>                                          
+ 						</div>
+-					</div>   
+-				</div></div>     
+-				
+-				<div id='vpndetails' x-mojo-element="Drawer">
++					</div></div>
++
++					<div class="palm-row first" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++						<div id="ime_OnOff" class="title truncating-text">
++						</div>		
++					</div></div> 
++					
++					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+@@ -109,7 +233,7 @@
+ 				
+ 				<div id='vpndetails' x-mojo-element="Drawer">
+ 									
+-					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list">
++					<div id="imelist" x-mojo-element="IndexedList" class="in-drawer-list">
+ 					</div>
+ 					
+ 					<div class="palm-section-divider"></div>				
+@@ -115,7 +239,7 @@
+ 					<div class="palm-section-divider"></div>				
+ 					
+ 					
+-					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
++					<div id="ime_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>Preferenze VPN</span>
+ 						</div>
+@@ -117,7 +241,7 @@
+ 					
+ 					<div id="vpn_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+-							<span>Preferenze VPN</span>
++							<span x-mojo-loc=''>IME Preferences</span> 
+ 						</div>
+ 					</div></div>  
+ 					
+@@ -122,11 +246,12 @@
+ 					</div></div>  
+ 					
+ 				</div> 
+-				                           
+-				
+-				<div class="palm-section-divider"></div> 
+-				
+-				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++
++				<!-- VPN tab - Not currently used-->
++
++				<div id='vpndetails' x-mojo-element="Drawer" class="hide">
++
++					<div class="palm-row hide" id="dm_vpn" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+ 							<div class="label right" id="btmsg">&nbsp;</div>
+ 							<div class="wifi-container">            
+@@ -128,19 +253,11 @@
+ 				
+ 				<div class="palm-row" id="dm_bluetooth" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<div class="label right" id="btmsg">&nbsp;</div>
+-							<div class="wifi-container">            
+-								<div id='btSpinner' x-mojo-element="Spinner" class="wifi-spinner right"></div>
+-								<span>Bluetooth</span>                                          
+-							</div>				
+-						</div>				
+-				</div></div>
+-				
+-				<div id="btdetails" x-mojo-element="Drawer">
+-					
+-					<div class="palm-row" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-						<div id="bt_radio" class="title truncating-text">
+-						</div>								
++							<div class="label right" id="vpnmsg">&nbsp;</div>                               
++							<div class="vpn-container">            
++								<span x-mojo-loc=''>VPN</span>                                          
++							</div>
++						</div>   
+ 					</div></div>
+ 					
+ 					<div class="palm-section-divider"></div>
+@@ -142,7 +259,7 @@
+ 						<div id="bt_radio" class="title truncating-text">
+ 						</div>								
+ 					</div></div>
+-					
++
+ 					<div class="palm-section-divider"></div>
+ 									
+ 					<div id="btlist" x-mojo-element="IndexedList">
+@@ -145,8 +262,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>
+ 									
+-					<div id="btlist" x-mojo-element="IndexedList">
+-					</div>
++					<div id="vpnlist" x-mojo-element="IndexedList" class="in-drawer-list"></div>
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+@@ -148,7 +264,7 @@
+ 					<div id="btlist" x-mojo-element="IndexedList">
+ 					</div>
+ 					
+-					<div class="palm-section-divider"></div>					
++					<div class="palm-section-divider"></div>
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+@@ -150,7 +266,7 @@
+ 					
+ 					<div class="palm-section-divider"></div>					
+ 					
+-					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
++					<div class="palm-row" id="vpn_pref" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">   
+ 						<div class="title truncating-text">
+ 							<span>Preferenze Bluetooth</span>
+ 						</div>
+@@ -152,7 +268,7 @@
+ 					
+ 					<div id="bt_pref" class="palm-row last" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+ 						<div class="title truncating-text">
+-							<span>Preferenze Bluetooth</span>
++							<span x-mojo-loc=''>VPN Preferences</span>
+ 						</div>
+ 					</div></div>
+ 					
+@@ -154,7 +270,7 @@
+ 						<div class="title truncating-text">
+ 							<span>Preferenze Bluetooth</span>
+ 						</div>
+-					</div></div>
++					</div></div>  
+ 					
+ 				</div>	
+ 				
+@@ -156,16 +272,8 @@
+ 						</div>
+ 					</div></div>
+ 					
+-				</div>	
+-				
+-				<div class="palm-section-divider"></div>
+-				
+-				<div id="dm_airplanemode" class="palm-row last menu-end" x-mojo-tap-highlight='momentary'><div class="palm-row-wrapper">
+-					<div id="dm_airplanemode_status" class="title truncating-text">
+-					 </div>
+-				</div></div>   
+-				
+-				</div>       
+-			</div>
++				</div> 
++
++			</div></div>
+ 		</div>
+ </div>                                              

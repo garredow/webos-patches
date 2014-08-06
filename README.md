@@ -1,4 +1,4 @@
-webos-patches
-=============
+patches
+=======
 
-A small collection of my more popular webOS patches.
+A collection of my webOS patches.

@@ -1,0 +1,15 @@
+Name: User Agent Override
+Version: 1
+Author: Choorp Studios
+Description: This patch lets you specify a custom user agent for the web browser.
+
+--- .orig/etc/palm/browser-app.conf
++++ /etc/palm/browser-app.conf
+@@ -38,6 +38,7 @@
+ AppCacheDbPath=/media/cryptofs/dbdata/appcache
+ AppCacheDbMaxSize=1073741824
+ EnableNoSteCommonTagsCheck=true
++UserAgentOverride=Mozilla/6.0 (Windows NT 6.2; WOW64; rv:16.0.1) Gecko/20121011 Firefox/16.0.1
+ 
+ # The 'EnableFitWidth' parameter lets us control the default behavior of ScrollView.
+ EnableFitWidth=false
