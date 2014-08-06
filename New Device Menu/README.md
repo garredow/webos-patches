@@ -10,9 +10,11 @@ Beta3
 - Moved the device menu to center of screen
 - A bit of restyling here and there
 - Major code cleanup
+
 Beta2
 - Added Rotation Lock toggle
 - Changed 'Flight Mode' to 'Airplane Mode'
+
 Beta1
 - Fixed sliders
 - Added ability to launch Location Preferences app
@@ -22,5 +24,6 @@ Beta1
 - Added ability to cycle wifi
 - Cleaned up styling to maintain a consistent experience between tabs
 - Cleaned up the code
+
 Alpha1
 - Initial release
