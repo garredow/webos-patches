@@ -14,8 +14,10 @@ v0.1.2
 - Fixed Calendar icons in the App Launcher
 - Fixed most system popup notifications. An example of this would be the popup that appears when you connect your phone to a PC.
 - Fixed Clock app's alarm popup notification
+
 v0.1.1
 - Fixed missing Email and Phone icons
 - Icons in expanded notifications now fit their container
+
 v0.1.0
 - Initial release
